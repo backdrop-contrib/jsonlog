@@ -1,0 +1,8 @@
+name = File Log
+description = Logs and records system events to file log.
+package = Administration
+
+core = 7.x
+php = 5.3
+
+configure = admin/config/system/log_filter

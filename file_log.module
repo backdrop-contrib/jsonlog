@@ -1,0 +1,82 @@
+<?php
+
+/**
+ * @file
+ * Redirects logging messages to file log.
+ */
+
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function file_log_form_system_logging_settings_alter(&$form, &$form_state) {
+  $final_path = $error_log = ini_get('error_log');
+  $path = variable_get('file_log_path', '');
+  $filename = variable_get('file_log_filename', '');
+  if ($path) {
+    $final_path = $path;
+  }
+  if ($filename) {
+    $final_path = dirname($final_path) . '/' . $filename;
+  }
+  $form['file_log_path_display'] = array(
+    '#type' => 'markup',
+    '#markup' => '<label>' . t('Currently logs to') . ':</label><p>' . $final_path . '</p>',
+  );
+  // If empty file_log_path: use php ini error_log.
+  $form['file_log_path'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Log file path'),
+    '#description' => t('Overrides PHP ini error_log:!break!error_log', array('!break' => '<br/>', '!error_log' => $error_log)),
+    '#default_value' => $path,
+  );
+  // If non-empty filename, replace that at end of error_log|file_log_path.
+  $form['file_log_filename'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Log filename'),
+    '#description' => t('If non-empty: Replaces filename part of the \'Log file path\'.!breakExample: \'site-name.log\'', array('!break' => '<br/>')),
+    '#default_value' => $filename,
+  );
+  $form['file_log_json'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Format log events as JSON'),
+    '#description' => t('For logstash/kibana.'),
+    '#default_value' => variable_get('file_log_json', FALSE),
+  );
+  $form['file_log_format'] = array(
+    '#type' => 'textarea',
+    '#title' => t('Log event format'),
+    '#description' => t('Ignored if \'Format log events as JSON\'.'),
+    '#default_value' => variable_get('file_log_format', '!base_url|!timestamp|!type|!ip|!request_uri|!referer|!uid|!link|!message'),
+  );
+  $form['actions']['#weight'] = 1;
+}
+
+/**
+ * Implements hook_watchdog().
+ */
+function file_log_watchdog_not(array $log_entry) {
+  global $base_url;
+
+  $log_init = &drupal_static(__FUNCTION__, FALSE);
+
+  if (!$log_init) {
+    $log_init = TRUE;
+    $default_facility = defined('LOG_LOCAL0') ? LOG_LOCAL0 : LOG_USER;
+    openlog(variable_get('file_log_identity', 'drupal'), LOG_NDELAY, variable_get('file_log_facility', $default_facility));
+  }
+
+  $message = strtr(variable_get('file_log_format', '!base_url|!timestamp|!type|!ip|!request_uri|!referer|!uid|!link|!message'), array(
+    '!base_url'    => $base_url,
+    '!timestamp'   => $log_entry['timestamp'],
+    '!type'        => $log_entry['type'],
+    '!ip'          => $log_entry['ip'],
+    '!request_uri' => $log_entry['request_uri'],
+    '!referer'     => $log_entry['referer'],
+    '!uid'         => $log_entry['uid'],
+    '!link'        => strip_tags($log_entry['link']),
+    '!message'     => strip_tags(!isset($log_entry['variables']) ? $log_entry['message'] : strtr($log_entry['message'], $log_entry['variables'])),
+  ));
+
+  syslog($log_entry['severity'], $message);
+}
