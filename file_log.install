@@ -9,6 +9,7 @@
  * Implements hook_uninstall().
  */
 function file_log_uninstall() {
+  variable_del('file_log_error_log');
   variable_del('file_log_path');
   variable_del('file_log_filename');
   variable_del('file_log_json');

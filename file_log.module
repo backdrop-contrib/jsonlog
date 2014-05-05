@@ -10,6 +10,11 @@
  * Implements hook_form_FORM_ID_alter().
  */
 function file_log_form_system_logging_settings_alter(&$form, &$form_state) {
+
+  $module_i18n_context = array('context' => 'module:file_log');
+
+  $use_error_log = variable_get('file_log_error_log', 0);
+
   $final_path = $error_log = ini_get('error_log');
   $path = variable_get('file_log_path', '');
   $filename = variable_get('file_log_filename', '');
@@ -19,37 +24,70 @@ function file_log_form_system_logging_settings_alter(&$form, &$form_state) {
   if ($filename) {
     $final_path = dirname($final_path) . '/' . $filename;
   }
-  $form['file_log_path_display'] = array(
-    '#type' => 'markup',
-    '#markup' => '<label>' . t('Currently logs to') . ':</label><p>' . $final_path . '</p>',
+
+  $form['file_log'] = array(
+    '#type' => 'fieldset',
+    '#title' => 'File log',
+    '#collapsible' => TRUE,
+    '#collapsed' => FALSE,
+    'file_log_error_log' => array(
+      '#type' => 'checkbox',
+      '#title' => t('Use error_log, not syslog', array(), $module_i18n_context),
+      '#default_value' => $use_error_log,
+    ),
+    'file_log_error_log_settings' => array(
+      '#type' => 'fieldset',
+      '#title' => t('error_log file', array(), $module_i18n_context),
+      '#collapsible' => TRUE,
+      '#collapsed' => !$use_error_log,
+      'file_log_path_display' => array(
+        '#type' => 'markup',
+        '#markup' => '<label>' . t('Currently logs to', array(), $module_i18n_context) . ':</label><p>' . $final_path . '</p>',
+      ),
+      'file_log_path' => array(
+        '#type' => 'textfield',
+        '#title' => t('Log file path'),
+        '#description' => t(
+          'Overrides PHP ini error_log:!break!error_log',
+          array('!break' => '<br/>', '!error_log' => $error_log),
+          $module_i18n_context
+        ),
+        '#default_value' => $path,
+      ),
+      'file_log_filename' => array(
+        '#type' => 'textfield',
+        '#title' => t('Log filename'),
+        '#description' => t(
+          'If non-empty: Replaces filename part of the \'Log file path\'.!breakExample: \'site-name.log\'',
+          array('!break' => '<br/>'),
+          $module_i18n_context
+        ),
+        '#default_value' => $filename,
+      ),
+    ),
+    'file_log_json' => array(
+      '#type' => 'checkbox',
+      '#title' => t('Format log events as JSON', array(), $module_i18n_context),
+      '#description' => t(
+        'For log viewers like !logstash/!kibana.',
+        array(
+          '!logstash' => l('logstash', 'http://logstash.net', array('attributes' => array('target' => '_blank'))),
+          '!kibana' => l('kibana', 'http://rashidkpc.github.io/Kibana', array('attributes' => array('target' => '_blank')))
+        ),
+        $module_i18n_context
+      ),
+      '#default_value' => variable_get('file_log_json', 0),
+    ),
+    'file_log_format' => array(
+      '#type' => 'textarea',
+      '#title' => t('Log event format', array(), $module_i18n_context),
+      '#description' => t('Ignored if \'Format log events as JSON\'.', array(), $module_i18n_context),
+      '#default_value' => variable_get('file_log_format', '!base_url|!timestamp|!type|!ip|!request_uri|!referer|!uid|!link|!message'),
+    )
   );
-  // If empty file_log_path: use php ini error_log.
-  $form['file_log_path'] = array(
-    '#type' => 'textfield',
-    '#title' => t('Log file path'),
-    '#description' => t('Overrides PHP ini error_log:!break!error_log', array('!break' => '<br/>', '!error_log' => $error_log)),
-    '#default_value' => $path,
-  );
-  // If non-empty filename, replace that at end of error_log|file_log_path.
-  $form['file_log_filename'] = array(
-    '#type' => 'textfield',
-    '#title' => t('Log filename'),
-    '#description' => t('If non-empty: Replaces filename part of the \'Log file path\'.!breakExample: \'site-name.log\'', array('!break' => '<br/>')),
-    '#default_value' => $filename,
-  );
-  $form['file_log_json'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Format log events as JSON'),
-    '#description' => t('For logstash/kibana.'),
-    '#default_value' => variable_get('file_log_json', FALSE),
-  );
-  $form['file_log_format'] = array(
-    '#type' => 'textarea',
-    '#title' => t('Log event format'),
-    '#description' => t('Ignored if \'Format log events as JSON\'.'),
-    '#default_value' => variable_get('file_log_format', '!base_url|!timestamp|!type|!ip|!request_uri|!referer|!uid|!link|!message'),
-  );
-  $form['actions']['#weight'] = 1;
+
+  // @todo: syslog does the following - why?
+  //$form['actions']['#weight'] = 1;
 }
 
 /**
