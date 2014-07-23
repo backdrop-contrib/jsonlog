@@ -1,0 +1,59 @@
+/**
+ * @file
+ * JSON Log module.
+ */
+
+fieldset#edit-jsonlog-fields div.fieldset-legend {
+  background: none;
+  text-transform: none;
+}
+fieldset#edit-jsonlog-fields div.fieldset-wrapper {
+  display: inline-block;
+}
+fieldset#edit-jsonlog-fields div.fieldset-wrapper > div:nth-child(even) {
+  background-color: #f3f4ee;
+}
+fieldset#edit-jsonlog-fields div.fieldset-wrapper > div:last-child {
+  border-bottom: 0.2em solid #f3f4ee;
+}
+fieldset#edit-jsonlog-fields div.fieldset-wrapper > div.fieldset-description {
+  padding-bottom: 1em;
+}
+fieldset#edit-jsonlog-fields div.fieldset-wrapper > div.form-item.form-type-textfield {
+  margin: 0;
+  padding: 0.4em 1em 0.5em 1em;
+}
+fieldset#edit-jsonlog-fields div.fieldset-wrapper > div.form-item.form-type-textfield > label {
+  display: inline-block;
+  margin: 0;
+  padding: 0 1em 0 0;
+  font-size: 0.9em;
+  width: 28em;
+}
+fieldset#edit-jsonlog-fields div.fieldset-wrapper > div.form-item.form-type-textfield > label > span {
+  font-weight: normal;
+}
+fieldset#edit-jsonlog-fields div.fieldset-wrapper > div.form-item.form-type-textfield > span.field-prefix,
+fieldset#edit-jsonlog-fields div.fieldset-wrapper > div.form-item.form-type-textfield > span.field-suffix {
+  display: inline-block;
+  font-size: 0.9em;
+}
+fieldset#edit-jsonlog-fields div.fieldset-wrapper > div.form-item.form-type-textfield > span.field-prefix {
+  width: 6em;
+}
+fieldset#edit-jsonlog-fields div.fieldset-wrapper > div.form-item.form-type-textfield > span.field-suffix {
+  padding-left: 0.5em;
+}
+fieldset#edit-jsonlog-fields div.fieldset-wrapper > div.form-item.form-type-textfield.form-item-jsonlog-fields-legend {
+  cursor: default;
+  -moz-user-select: none;
+  -webkit-user-select: none;
+  -ms-user-select: none;
+}
+fieldset#edit-jsonlog-fields div.fieldset-wrapper > div.form-item.form-type-textfield > input[readonly='readonly'] {
+  background-color: transparent;
+  cursor: default;
+  -moz-user-select: none;
+  -webkit-user-select: none;
+  -ms-user-select: none;
+}

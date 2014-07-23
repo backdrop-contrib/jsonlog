@@ -1,0 +1,347 @@
+<?php
+/**
+ * @file
+ * JSON Log module.
+ */
+
+/**
+ * Adds this module's setting fields to the standard logging settings form.
+ *
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * @param array &$form
+ * @param array &$form_state
+ */
+function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
+  drupal_add_css(
+    drupal_get_path('module', 'jsonlog') . '/jsonlog.css',
+    array('type' => 'file', 'group' => CSS_DEFAULT, 'preprocess' => FALSE, 'every_page' => FALSE)
+  );
+
+  // Defaults.
+  $db =& $GLOBALS['databases']['default']['default'];
+  $siteid_default = drupal_strtolower(preg_replace('/[^\w\d\.\-_]/', '-', gethostname()))
+    . '__' . $db['database']
+    . (!$db['prefix'] ? '' : ('__' . $db['prefix']));
+  unset($db); // Clear ref.
+
+  $file_default = str_replace('\\', '/', dirname(ini_get('error_log'))) . '/' . $siteid_default . '.log.json';
+
+  // This translation is used a lot.
+  $t_siteId = t('Site ID', array(), array('context' => 'module:jsonlog'));
+
+
+  // @todo: Implement message truncation field. File writing may not be atomic when an entry exceeds the file systems' block size (ext3: 4Kb).
+
+  $form['jsonlog'] = array(
+    '#type' => 'fieldset',
+    '#title' => 'JSON Log',
+    '#collapsible' => TRUE,
+    '#collapsed' => FALSE,
+    'jsonlog_severity_threshold' => array(
+      '#type' => 'select',
+      '#title' => t('Don\'t log events that are less severe than', array(), array('context' => 'module:jsonlog')),
+      '#options' => watchdog_severity_levels(),
+      '#default_value' => variable_get('jsonlog_severity_threshold', WATCHDOG_WARNING),
+      '#attributes' => array(
+        'autocomplete' => 'off',
+      ),
+    ),
+    'jsonlog_siteid' => array(
+      '#type' => 'textfield',
+      '#title' => $t_siteId,
+      '#description' => t(
+        'Spaces and quotes gets replaced by hyphens.!breakDefaults to the server\'s hostname and the site\'s database name and prefix (if any):!break!default',
+        array(
+          '!default' => $siteid_default,
+          '!break' => '<br/>',
+        ),
+        array('context' => 'module:jsonlog')
+      ),
+      '#default_value' => variable_get('jsonlog_siteid', $siteid_default),
+      '#attributes' => array(
+        'autocomplete' => 'off',
+      ),
+    ),
+    'jsonlog_file' => array(
+      '#type' => 'textfield',
+      '#title' => t('Log file'),
+      '#description' => t(
+        'Defaults to PHP ini \'error_log\' path + !site_id:!break!default',
+        array(
+          '!default' => $file_default,
+          '!site_id' => $t_siteId,
+          '!break' => '<br/>',
+        ),
+        array('context' => 'module:jsonlog')
+      ),
+      '#default_value' => variable_get('jsonlog_file', $file_default),
+      '#size' => 100,
+      '#attributes' => array(
+        'autocomplete' => 'off',
+      ),
+    ),
+    'jsonlog_format_version' => array(
+      '#type' => 'textfield',
+      '#title' => t('JSON format version'),
+      '#description' => t('Version no. of the fields format out-lined below.'),
+      '#default_value' => variable_get('jsonlog_format_version', 1),
+      '#size' => 10,
+      '#attributes' => array(
+        'autocomplete' => 'off',
+      ),
+    ),
+    'jsonlog_fields' => array(
+      '#type' => 'fieldset',
+      '#title' => t('JSON field names', array(), array('context' => 'module:jsonlog')),
+      '#description' => t(
+        'Watchdog\'s native field names might not make sense in a non-Drupal environment (e.g. ip).!breakAnd some log utilities require special field names (like !logstash: @timestamp).',
+        array('!break' => '<br/>', '!logstash' => l('logstash', 'http://logstash.net/', array('attributes' => array('target' => '_blank')))),
+        array('context' => 'module:jsonlog')
+      ),
+      '#collapsible' => FALSE,
+      '#collapsed' => FALSE,
+      '#tree' => TRUE,
+      'legend' => array(
+        '#type' => 'textfield',
+        '#title' => t('Property', array(), array('context' => 'module:jsonlog')),
+        '#default_value' => t('field-name', array(), array('context' => 'module:jsonlog')),
+        '#size' => 15,
+        '#field_prefix' => t('native', array(), array('context' => 'module:jsonlog')),
+        '#field_suffix' => t('recommended', array(), array('context' => 'module:jsonlog')),
+        '#attributes' => array(
+          'autocomplete' => 'off',
+          'readonly' => 'readonly',
+        ),
+      ),
+    ),
+  );
+
+  // Make ISO 8601 timestamp for timestamp label.
+  if (!empty($_SERVER['REQUEST_TIME_FLOAT'])) {
+    $millis = round($_SERVER['REQUEST_TIME_FLOAT'] * 1000);
+    $seconds = (int) floor($millis / 1000);
+    $millis -= $seconds * 1000;
+    $millis = str_pad($millis, 3, '0', STR_PAD_LEFT);
+  }
+  else {
+    $seconds = REQUEST_TIME;
+    $millis = '000';
+  }
+  $timestamp = substr(gmdate('c', $seconds), 0, 19) . '.' . $millis . 'Z';
+
+  // JSON fields.
+  $json_fields = array(
+    'message' => array(
+      'label' => t('Message', array(), array('context' => 'module:jsonlog')),
+    ),
+    'timestamp' => array(
+      'label' => t('Timestamp !span(!time)!_span', array('!time' => $timestamp, '!span' => '<span>', '!_span' => '</span>'), array('context' => 'module:jsonlog')),
+      'name' => '@timestamp',
+    ),
+    'version' => array(
+      'custom' => TRUE,
+      'name' => '@version',
+      'label' => t('Version !span(of this format)!_span', array('!span' => '<span>', '!_span' => '</span>'), array('context' => 'module:jsonlog')),
+    ),
+    'event_id' => array(
+      'custom' => TRUE,
+      'name' => 'event_id',
+      'label' => t(
+        'Event ID !span(!site_id + unique ID)!_span',
+        array('!site_id' => $t_siteId, '!span' => '<span>', '!_span' => '</span>'),
+        array('context' => 'module:jsonlog')
+      ),
+    ),
+    'site_id' => array(
+      'custom' => TRUE,
+      'name' => 'site_id',
+      'label' => $t_siteId,
+    ),
+    'type' => array(
+      'label' => t('Type', array(), array('context' => 'module:jsonlog')),
+    ),
+    'severity' => array(
+      'label' => t('Severity', array(), array('context' => 'module:jsonlog')),
+    ),
+    'method' => array(
+      'custom' => TRUE,
+      'name' => 'method',
+      'label' => t('Request method !span(GET, POST, cli)!_span', array('!span' => '<span>', '!_span' => '</span>'), array('context' => 'module:jsonlog')),
+    ),
+    'request_uri' => array(
+      'label' => t('Request URI', array(), array('context' => 'module:jsonlog')),
+    ),
+    'referer' => array(
+      'label' => t('Referer', array(), array('context' => 'module:jsonlog')),
+    ),
+    'uid' => array(
+      'label' => t('User ID', array(), array('context' => 'module:jsonlog')),
+    ),
+    'username' => array(
+      'custom' => TRUE,
+      'name' => 'username',
+      'label' => t('Username !span(when not anonymous user)!_span', array('!span' => '<span>', '!_span' => '</span>'), array('context' => 'module:jsonlog')),
+    ),
+    'ip' => array(
+      'name' => 'client_ip',
+      'label' => t('User\'s I.P. address', array(), array('context' => 'module:jsonlog')),
+    ),
+    'link' => array(
+      'label' => t('Link', array(), array('context' => 'module:jsonlog')),
+    ),
+    'variables' => array(
+      'label' => t('Variables', array(), array('context' => 'module:jsonlog')),
+    ),
+  );
+
+  $field_names = variable_get('jsonlog_fields', array());
+
+  foreach ($json_fields as $name => $props) {
+    $form['jsonlog']['jsonlog_fields'][$name] = array(
+      '#type' => 'textfield',
+      '#title' => $props['label'],
+      '#default_value' => !empty($field_names[$name]) ? $field_names[$name] : (!empty($props['name']) ? $props['name'] : $name),
+      '#field_prefix' => empty($props['custom']) ? $name : '&nbsp;',
+      '#field_suffix' => !empty($props['name']) ? $props['name'] : '&nbsp;',
+      '#required' => TRUE,
+      '#size' => 15,
+      '#attributes' => array(
+        'autocomplete' => 'off',
+      ),
+    );
+  }
+
+  // Prepend our submit handler; we need to get in first, otherwise our changes to form values amounts to nothing.
+  array_unshift($form['#submit'], 'jsonlog_form_system_logging_settings_submit');
+}
+
+/**
+ * @param array $form
+ * @param array $form_state
+ */
+function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
+  $input =& $form_state['input'];
+  $values =& $form_state['values'];
+
+  // Trim all values.
+  $fields = array(
+    'jsonlog_severity_threshold',
+    'jsonlog_siteid',
+    'jsonlog_file',
+    'jsonlog_format_version',
+  );
+  foreach ($fields as $name) {
+    $values[$name] = trim($values[$name]);
+  }
+  foreach ($values['jsonlog_fields'] as &$value) {
+    $value = trim($value);
+  }
+  unset($value); // Iteration ref.
+
+  // Don't ever save this field, which is only used as legend.
+  unset(
+    $input['jsonlog_fields']['legend'],
+    $values['jsonlog_fields']['legend']
+  );
+}
+
+/**
+ * Implements hook_watchdog().
+ *
+ * @param array $log_entry
+ */
+function jsonlog_watchdog(array $log_entry) {
+  static $threshold, $site_id, $file, $version, $fields;
+
+  // Don't load more settings than threshold, in case current entry isn't sufficiently severe.
+  if ($threshold === NULL) {
+    $threshold = variable_get('jsonlog_severity_threshold', WATCHDOG_WARNING);
+  }
+  if ($log_entry['severity'] > $threshold) { // Severity is upside down; less is more.
+    return;
+  }
+
+  // Load the rest of the settings.
+  if (!$site_id) {
+    // Site ID.
+    if (!($site_id = variable_get('jsonlog_siteid'))) {
+      $db =& $GLOBALS['databases']['default']['default'];
+      $site_id = drupal_strtolower(preg_replace('/[^\w\d\.\-_]/', '-', gethostname()))
+        . '__' . $db['database']
+        . (!$db['prefix'] ? '' : ('__' . $db['prefix']));
+      unset($db); // Clear ref.
+    }
+
+    $file = variable_get('jsonlog_file', str_replace('\\', '/', dirname(ini_get('error_log'))) . '/' . $site_id . '.log.json');
+    $version = variable_get('jsonlog_format_version', 1);
+    $fields = variable_get('jsonlog_fields', array(
+      'message' => 'message',
+      'timestamp' => '@timestamp',
+      'version' => '@version',
+      'event_id' => 'event_id',
+      'site_id' => 'site_id',
+      'type' => 'type',
+      'severity' => 'severity',
+      'method' => 'method',
+      'request_uri' => 'request_uri',
+      'referer' => 'referer',
+      'uid' => 'uid',
+      'username' => 'username',
+      'ip' => 'client_ip',
+      'link' => 'link',
+      'variables' => 'variables',
+    ));
+  }
+
+
+  // Create the entry.
+
+  $entry = new stdClass();
+  $entry->{$fields['message']} = $log_entry['message'];
+
+  if (!empty($_SERVER['REQUEST_TIME_FLOAT'])) {
+    $millis = round($_SERVER['REQUEST_TIME_FLOAT'] * 1000);
+    $seconds = (int) floor($millis / 1000);
+    $millis -= $seconds * 1000;
+    $millis = str_pad($millis, 3, '0', STR_PAD_LEFT);
+  }
+  else {
+    $seconds = $log_entry['timestamp'];
+    $millis = '000';
+  }
+  $entry->{$fields['timestamp']} = substr(gmdate('c', $seconds), 0, 19) . '.' . $millis . 'Z';
+
+  $entry->{$fields['version']} = $version;
+  $entry->{$fields['event_id']} = uniqid($site_id, TRUE);
+  $entry->{$fields['site_id']} = $site_id;
+  $entry->{$fields['type']} = $log_entry['type'];
+
+  $severity = array(
+    WATCHDOG_EMERGENCY => 'emergency',
+    WATCHDOG_ALERT => 'alert',
+    WATCHDOG_CRITICAL => 'critical',
+    WATCHDOG_ERROR => 'error',
+    WATCHDOG_WARNING => 'warning',
+    WATCHDOG_NOTICE => 'notice',
+    WATCHDOG_INFO => 'info',
+    WATCHDOG_DEBUG => 'debug',
+  );
+  $entry->{$fields['severity']} = $severity[$log_entry['severity']];
+
+  $entry->{$fields['method']} = !empty($_SERVER['REQUEST_METHOD']) ? $_SERVER['REQUEST_METHOD'] : 'cli';
+  $entry->{$fields['request_uri']} = $log_entry['request_uri'];
+  $entry->{$fields['referer']} = $log_entry['referer'];
+
+  $entry->{$fields['uid']} = $uid = $log_entry['uid'];
+  $entry->{$fields['username']} = $uid && !empty($GLOBALS['user']->name) ? $GLOBALS['user']->name : '';
+
+  $entry->{$fields['ip']} = $log_entry['ip'];
+  $entry->{$fields['link']} = strip_tags($log_entry['link']);
+  $entry->{$fields['variables']} = $log_entry['variables'];
+
+  if (($handle = fopen($file, 'a'))) {
+    fwrite($handle, "\n" . drupal_json_encode($entry));
+    fclose($handle);
+  }
+}

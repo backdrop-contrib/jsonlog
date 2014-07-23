@@ -1,0 +1,8 @@
+name = JSON Log
+description = Logs events JSON-formatted to a log file.
+package = Administration
+
+core = 7.x
+php = 5.3
+
+configure = admin/config/development/logging

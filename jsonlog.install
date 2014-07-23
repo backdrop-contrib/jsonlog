@@ -1,0 +1,14 @@
+<?php
+/**
+ * @file
+ * Install, update and uninstall functions for the JSON Log module.
+ */
+
+/**
+ * Implements hook_uninstall().
+ */
+function jsonlog_uninstall() {
+  variable_del('jsonlog_path');
+  variable_del('jsonlog_filename');
+  variable_del('jsonlog_format');
+}
