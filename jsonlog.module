@@ -140,16 +140,10 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
   );
 
   // Make ISO 8601 timestamp for timestamp label.
-  if (!empty($_SERVER['REQUEST_TIME_FLOAT'])) {
-    $millis = round($_SERVER['REQUEST_TIME_FLOAT'] * 1000);
-    $seconds = (int) floor($millis / 1000);
-    $millis -= $seconds * 1000;
-    $millis = str_pad($millis, 3, '0', STR_PAD_LEFT);
-  }
-  else {
-    $seconds = REQUEST_TIME;
-    $millis = '000';
-  }
+  $millis = round(microtime(TRUE) * 1000);
+  $seconds = (int) floor($millis / 1000);
+  $millis -= $seconds * 1000;
+  $millis = str_pad($millis, 3, '0', STR_PAD_LEFT);
   $timestamp = substr(gmdate('c', $seconds), 0, 19) . '.' . $millis . 'Z';
 
   // JSON fields.
@@ -218,7 +212,7 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
     'truncation' => array(
       'custom' => TRUE,
       'name' => 'trunc',
-      'label' => t('Truncation !span(message shortened, variables removed?)!_span', array('!span' => '<span>', '!_span' => '</span>'), array('context' => 'module:jsonlog')),
+      'label' => t('Truncation !span(original/truncated length of message)!_span', array('!span' => '<span>', '!_span' => '</span>'), array('context' => 'module:jsonlog')),
     ),
   );
 
@@ -248,7 +242,6 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
  * @param array $form_state
  */
 function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
-  $input =& $form_state['input'];
   $values =& $form_state['values'];
 
   // Trim all values.
@@ -272,10 +265,7 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
   }
 
   // Don't ever save this field, which is only used as legend.
-  unset(
-    $input['jsonlog_fields']['legend'],
-    $values['jsonlog_fields']['legend']
-  );
+  unset($form_state['input']['jsonlog_fields']['legend'], $values['jsonlog_fields']['legend']);
 }
 
 /**
@@ -284,39 +274,38 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
  * @param array $log_entry
  */
 function jsonlog_watchdog(array $log_entry) {
-  static $threshold, $truncate, $site_id, $file, $version, $fields;
+  static $_threshold, $_truncate, $_site_id, $_file, $_version, $_fields, $_severity;
 
   // Don't load more settings than threshold, in case current entry isn't sufficiently severe.
-  if ($threshold === NULL) {
-    $threshold = variable_get('jsonlog_severity_threshold', WATCHDOG_WARNING);
+  if ($_threshold === NULL) {
+    $_threshold = variable_get('jsonlog_severity_threshold', WATCHDOG_WARNING);
   }
-  if ($log_entry['severity'] > $threshold) { // Severity is upside down; less is more.
+  if ($log_entry['severity'] > $_threshold) { // Severity is upside down; less is more.
     return;
   }
 
   // Load the rest of the settings.
-  if (!$site_id) {
-
-    if (!($site_id = variable_get('jsonlog_siteid'))) {
+  if (!$_site_id) {
+    if (!($_site_id = variable_get('jsonlog_siteid'))) {
       $db =& $GLOBALS['databases']['default']['default'];
-      $site_id = drupal_strtolower(preg_replace('/[^\w\d\.\-_]/', '-', gethostname()))
+      $_site_id = drupal_strtolower(preg_replace('/[^\w\d\.\-_]/', '-', gethostname()))
         . '__' . $db['database']
         . (!$db['prefix'] ? '' : ('__' . $db['prefix']));
       unset($db); // Clear ref.
     }
 
-    if (($truncate = variable_get('jsonlog_truncate', JSONLOG_TRUNCATE_DEFAULT))) {
+    if (($_truncate = variable_get('jsonlog_truncate', JSONLOG_TRUNCATE_DEFAULT))) {
       // Kb to bytes.
-      $truncate *= 1024;
+      $_truncate *= 1024;
       // Substract estimated max length of everything but message content.
-      $truncate -= 640;
+      $_truncate -= 640;
       // Message will get longer when JSON encoded, because of hex encoding of <>&" chars.
-      $truncate *= 7 / 8;
+      $_truncate *= 7 / 8;
     }
 
-    $file = variable_get('jsonlog_file', str_replace('\\', '/', dirname(ini_get('error_log'))) . '/' . $site_id . '.log.json');
-    $version = variable_get('jsonlog_format_version', 1);
-    $fields = variable_get('jsonlog_fields', array(
+    $_file = variable_get('jsonlog_file', str_replace('\\', '/', dirname(ini_get('error_log'))) . '/' . $_site_id . '.log.json');
+    $_version = variable_get('jsonlog_format_version', 1);
+    $_fields = variable_get('jsonlog_fields', array(
       'message' => 'message',
       'timestamp' => '@timestamp',
       'version' => '@version',
@@ -332,7 +321,19 @@ function jsonlog_watchdog(array $log_entry) {
       'ip' => 'client_ip',
       'link' => 'link',
       'variables' => 'variables',
+      'truncation' => 'trunc',
     ));
+
+    $_severity = array(
+      WATCHDOG_EMERGENCY => 'emergency',
+      WATCHDOG_ALERT => 'alert',
+      WATCHDOG_CRITICAL => 'critical',
+      WATCHDOG_ERROR => 'error',
+      WATCHDOG_WARNING => 'warning',
+      WATCHDOG_NOTICE => 'notice',
+      WATCHDOG_INFO => 'info',
+      WATCHDOG_DEBUG => 'debug',
+    );
   }
 
 
@@ -351,7 +352,7 @@ function jsonlog_watchdog(array $log_entry) {
   $variables = $log_entry['variables'];
 
   // Truncate message.
-  if ($truncate && ($le = strlen($message)) > $truncate) { // Deliberately not drupal_strlen(); need 'physical' length, not (possibly shorter) multibyte length.
+  if ($_truncate && ($le = strlen($message)) > $_truncate) { // Deliberately not drupal_strlen(); need 'physical' length, not (possibly shorter) multibyte length.
     $truncation = array($le);
     // Flag variables truncated by setting it to false.
     if ($variables) {
@@ -364,16 +365,16 @@ function jsonlog_watchdog(array $log_entry) {
     do {
       --$limit;
       $le = strlen( // Deliberately not drupal_strlen(); need 'physical' length, not (possibly shorter) multibyte length.
-        $message = drupal_substr($message, 0, floor($truncate * (100 - $percent) / 100))
+        $message = drupal_substr($message, 0, floor($_truncate * (100 - $percent) / 100))
       );
       $percent += 20;
-    } while($limit > 0 && $le > $truncate);
+    } while($limit > 0 && $le > $_truncate);
     $truncation[] = $le;
   }
   else {
     $truncation = NULL;
   }
-  $entry->{$fields['message']} = $message;
+  $entry->{$_fields['message']} = $message;
   unset($message);
 
   // Use a milliseconds timestamp instead of watchdog()'s seconds timestamp.
@@ -381,47 +382,36 @@ function jsonlog_watchdog(array $log_entry) {
   $seconds = (int) floor($millis / 1000);
   $millis -= $seconds * 1000;
   $millis = str_pad($millis, 3, '0', STR_PAD_LEFT);
-  $entry->{$fields['timestamp']} = substr(gmdate('c', $seconds), 0, 19) . '.' . $millis . 'Z';
+  $entry->{$_fields['timestamp']} = substr(gmdate('c', $seconds), 0, 19) . '.' . $millis . 'Z';
 
-  $entry->{$fields['version']} = $version;
-  $entry->{$fields['event_id']} = uniqid($site_id, TRUE);
-  $entry->{$fields['site_id']} = $site_id;
-  $entry->{$fields['type']} = $log_entry['type'];
+  $entry->{$_fields['version']} = $_version;
+  $entry->{$_fields['event_id']} = uniqid($_site_id, TRUE);
+  $entry->{$_fields['site_id']} = $_site_id;
+  $entry->{$_fields['type']} = $log_entry['type'];
 
-  $severity = array(
-    WATCHDOG_EMERGENCY => 'emergency',
-    WATCHDOG_ALERT => 'alert',
-    WATCHDOG_CRITICAL => 'critical',
-    WATCHDOG_ERROR => 'error',
-    WATCHDOG_WARNING => 'warning',
-    WATCHDOG_NOTICE => 'notice',
-    WATCHDOG_INFO => 'info',
-    WATCHDOG_DEBUG => 'debug',
-  );
-  $entry->{$fields['severity']} = $severity[$log_entry['severity']];
+  $entry->{$_fields['severity']} = $_severity[$log_entry['severity']];
 
-  $entry->{$fields['method']} = !empty($_SERVER['REQUEST_METHOD']) ? $_SERVER['REQUEST_METHOD'] : 'cli';
-  $entry->{$fields['request_uri']} = $log_entry['request_uri'];
-  $entry->{$fields['referer']} = $log_entry['referer'];
+  $entry->{$_fields['method']} = !empty($_SERVER['REQUEST_METHOD']) ? $_SERVER['REQUEST_METHOD'] : 'cli';
+  $entry->{$_fields['request_uri']} = $log_entry['request_uri'];
+  $entry->{$_fields['referer']} = $log_entry['referer'];
 
-  $entry->{$fields['uid']} = $uid = $log_entry['uid'];
-  $entry->{$fields['username']} = $uid && !empty($GLOBALS['user']->name) ? $GLOBALS['user']->name : '';
+  $entry->{$_fields['uid']} = $uid = $log_entry['uid'];
+  $entry->{$_fields['username']} = $uid && !empty($GLOBALS['user']->name) ? $GLOBALS['user']->name : '';
 
-  $entry->{$fields['ip']} = $log_entry['ip'];
-  $entry->{$fields['link']} = strip_tags($log_entry['link']);
-  $entry->{$fields['variables']} = $variables;
-  $entry->{$fields['truncation']} = $truncation;
+  $entry->{$_fields['ip']} = $log_entry['ip'];
+  $entry->{$_fields['link']} = !$log_entry['link'] ? NULL : strip_tags($log_entry['link']);
+  $entry->{$_fields['variables']} = $variables;
+  $entry->{$_fields['truncation']} = $truncation;
 
 
   // File append. If failure: log filing error to web server's default log.
-
-  if (($handle = fopen($file, 'a'))) {
+  if (($handle = fopen($_file, 'a'))) {
     if (!fwrite($handle, "\n" . drupal_json_encode($entry))) {
-      error_log('Drupal jsonlog failed to write to file[' . $file . ']; site ID[' . $site_id . '].');
+      error_log('Drupal jsonlog failed to write to file[' . $_file . ']; site ID[' . $_site_id . '].');
     }
     fclose($handle);
   }
   else {
-    error_log('Drupal jsonlog failed to open file[' . $file . ']; site ID[' . $site_id . '].');
+    error_log('Drupal jsonlog failed to open file[' . $_file . ']; site ID[' . $_site_id . '].');
   }
 }
