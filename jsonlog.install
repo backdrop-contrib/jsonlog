@@ -8,7 +8,10 @@
  * Implements hook_uninstall().
  */
 function jsonlog_uninstall() {
-  variable_del('jsonlog_path');
-  variable_del('jsonlog_filename');
-  variable_del('jsonlog_format');
+  variable_del('jsonlog_severity_threshold');
+  variable_del('jsonlog_truncate');
+  variable_del('jsonlog_siteid');
+  variable_del('jsonlog_file');
+  variable_del('jsonlog_format_version');
+  variable_del('jsonlog_fields');
 }

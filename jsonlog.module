@@ -5,6 +5,13 @@
  */
 
 /**
+ * Default max. length of a log entry, in kilobytes.
+ *
+ * @type integer
+ */
+define('JSONLOG_TRUNCATE_DEFAULT', 4);
+
+/**
  * Adds this module's setting fields to the standard logging settings form.
  *
  * Implements hook_form_FORM_ID_alter().
@@ -30,9 +37,6 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
   // This translation is used a lot.
   $t_siteId = t('Site ID', array(), array('context' => 'module:jsonlog'));
 
-
-  // @todo: Implement message truncation field. File writing may not be atomic when an entry exceeds the file systems' block size (ext3: 4Kb).
-
   $form['jsonlog'] = array(
     '#type' => 'fieldset',
     '#title' => 'JSON Log',
@@ -43,6 +47,24 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
       '#title' => t('Don\'t log events that are less severe than', array(), array('context' => 'module:jsonlog')),
       '#options' => watchdog_severity_levels(),
       '#default_value' => variable_get('jsonlog_severity_threshold', WATCHDOG_WARNING),
+      '#attributes' => array(
+        'autocomplete' => 'off',
+      ),
+    ),
+    'jsonlog_truncate' => array(
+      '#type' => 'textfield',
+      '#title' => t('Truncate events to'),
+      '#description' => t(
+        'Zero means no truncation.!breakLog entries longer than the file system\'s block size may result in garbled logs, due to concurrent file writes.!breakThe default block size of ext3 (common *nix file system) is !default Kb.',
+        array(
+          '!default' => JSONLOG_TRUNCATE_DEFAULT,
+          '!break' => '<br/>',
+        ),
+        array('context' => 'module:jsonlog')
+      ),
+      '#default_value' => variable_get('jsonlog_truncate', JSONLOG_TRUNCATE_DEFAULT),
+      '#size' => 5,
+      '#field_suffix' => t('Kb', array(), array('context' => 'module:jsonlog')),
       '#attributes' => array(
         'autocomplete' => 'off',
       ),
@@ -193,6 +215,11 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
     'variables' => array(
       'label' => t('Variables', array(), array('context' => 'module:jsonlog')),
     ),
+    'truncation' => array(
+      'custom' => TRUE,
+      'name' => 'trunc',
+      'label' => t('Truncation !span(message shortened, variables removed?)!_span', array('!span' => '<span>', '!_span' => '</span>'), array('context' => 'module:jsonlog')),
+    ),
   );
 
   $field_names = variable_get('jsonlog_fields', array());
@@ -227,6 +254,7 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
   // Trim all values.
   $fields = array(
     'jsonlog_severity_threshold',
+    'jsonlog_truncate',
     'jsonlog_siteid',
     'jsonlog_file',
     'jsonlog_format_version',
@@ -238,6 +266,10 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
     $value = trim($value);
   }
   unset($value); // Iteration ref.
+
+  if (!$values['jsonlog_truncate'] || $values['jsonlog_truncate'] < 0) {
+    $values['jsonlog_truncate'] = 0;
+  }
 
   // Don't ever save this field, which is only used as legend.
   unset(
@@ -252,7 +284,7 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
  * @param array $log_entry
  */
 function jsonlog_watchdog(array $log_entry) {
-  static $threshold, $site_id, $file, $version, $fields;
+  static $threshold, $truncate, $site_id, $file, $version, $fields;
 
   // Don't load more settings than threshold, in case current entry isn't sufficiently severe.
   if ($threshold === NULL) {
@@ -264,13 +296,22 @@ function jsonlog_watchdog(array $log_entry) {
 
   // Load the rest of the settings.
   if (!$site_id) {
-    // Site ID.
+
     if (!($site_id = variable_get('jsonlog_siteid'))) {
       $db =& $GLOBALS['databases']['default']['default'];
       $site_id = drupal_strtolower(preg_replace('/[^\w\d\.\-_]/', '-', gethostname()))
         . '__' . $db['database']
         . (!$db['prefix'] ? '' : ('__' . $db['prefix']));
       unset($db); // Clear ref.
+    }
+
+    if (($truncate = variable_get('jsonlog_truncate', JSONLOG_TRUNCATE_DEFAULT))) {
+      // Kb to bytes.
+      $truncate *= 1024;
+      // Substract estimated max length of everything but message content.
+      $truncate -= 640;
+      // Message will get longer when JSON encoded, because of hex encoding of <>&" chars.
+      $truncate *= 7 / 8;
     }
 
     $file = variable_get('jsonlog_file', str_replace('\\', '/', dirname(ini_get('error_log'))) . '/' . $site_id . '.log.json');
@@ -298,18 +339,48 @@ function jsonlog_watchdog(array $log_entry) {
   // Create the entry.
 
   $entry = new stdClass();
-  $entry->{$fields['message']} = $log_entry['message'];
 
-  if (!empty($_SERVER['REQUEST_TIME_FLOAT'])) {
-    $millis = round($_SERVER['REQUEST_TIME_FLOAT'] * 1000);
-    $seconds = (int) floor($millis / 1000);
-    $millis -= $seconds * 1000;
-    $millis = str_pad($millis, 3, '0', STR_PAD_LEFT);
+  // Strip tags if message starts with < (Inspect logs in tag).
+  if (($message = $log_entry['message']) && $message{0} === '<') {
+    $message = strip_tags($message);
+  }
+  // Escape newline, (drupal_)json_encode() doesn't escape control characters (Inspect uses newline).
+  $message = str_replace("\n", '\\n', $message);
+
+  // If truncation required, start by skipping variables.
+  $variables = $log_entry['variables'];
+
+  // Truncate message.
+  if ($truncate && ($le = strlen($message)) > $truncate) { // Deliberately not drupal_strlen(); need 'physical' length, not (possibly shorter) multibyte length.
+    $truncation = array($le);
+    // Flag variables truncated by setting it to false.
+    if ($variables) {
+      $variables = FALSE;
+    }
+    // Truncate multibyte safe until ASCII length is equal to/less than max. byte length.
+    // ~ minus 10%, 30%, 50%, 70%.
+    $limit = 4;
+    $percent = 10;
+    do {
+      --$limit;
+      $le = strlen( // Deliberately not drupal_strlen(); need 'physical' length, not (possibly shorter) multibyte length.
+        $message = drupal_substr($message, 0, floor($truncate * (100 - $percent) / 100))
+      );
+      $percent += 20;
+    } while($limit > 0 && $le > $truncate);
+    $truncation[] = $le;
   }
   else {
-    $seconds = $log_entry['timestamp'];
-    $millis = '000';
+    $truncation = NULL;
   }
+  $entry->{$fields['message']} = $message;
+  unset($message);
+
+  // Use a milliseconds timestamp instead of watchdog()'s seconds timestamp.
+  $millis = round(microtime(TRUE) * 1000);
+  $seconds = (int) floor($millis / 1000);
+  $millis -= $seconds * 1000;
+  $millis = str_pad($millis, 3, '0', STR_PAD_LEFT);
   $entry->{$fields['timestamp']} = substr(gmdate('c', $seconds), 0, 19) . '.' . $millis . 'Z';
 
   $entry->{$fields['version']} = $version;
@@ -338,10 +409,19 @@ function jsonlog_watchdog(array $log_entry) {
 
   $entry->{$fields['ip']} = $log_entry['ip'];
   $entry->{$fields['link']} = strip_tags($log_entry['link']);
-  $entry->{$fields['variables']} = $log_entry['variables'];
+  $entry->{$fields['variables']} = $variables;
+  $entry->{$fields['truncation']} = $truncation;
+
+
+  // File append. If failure: log filing error to web server's default log.
 
   if (($handle = fopen($file, 'a'))) {
-    fwrite($handle, "\n" . drupal_json_encode($entry));
+    if (!fwrite($handle, "\n" . drupal_json_encode($entry))) {
+      error_log('Drupal jsonlog failed to write to file[' . $file . ']; site ID[' . $site_id . '].');
+    }
     fclose($handle);
+  }
+  else {
+    error_log('Drupal jsonlog failed to open file[' . $file . ']; site ID[' . $site_id . '].');
   }
 }

@@ -3,6 +3,9 @@
  * JSON Log module.
  */
 
+div.form-item.form-type-textfield.form-item-jsonlog-truncate > input {
+  text-align: right;
+}
 fieldset#edit-jsonlog-fields div.fieldset-legend {
   background: none;
   text-transform: none;
