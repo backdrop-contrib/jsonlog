@@ -349,7 +349,9 @@ function jsonlog_watchdog(array $log_entry) {
   // Load the rest of the settings.
   if (!$_site_id) {
     // If site ID setting doesnt exist: get default (and save it).
-    $_site_id = variable_get('jsonlog_siteid', _jsonlog_default_site_id(TRUE));
+    if (!($_site_id = variable_get('jsonlog_siteid'))) {
+      $_site_id = _jsonlog_default_site_id(TRUE);
+    }
 
     if (($_truncate = variable_get('jsonlog_truncate', JSONLOG_TRUNCATE_DEFAULT))) {
       // Kb to bytes.
@@ -361,8 +363,10 @@ function jsonlog_watchdog(array $log_entry) {
     }
 
     // If file setting doesnt exist: get default (and save it).
-    if (!($_file = variable_get('jsonlog_file', _jsonlog_default_file(TRUE)))) {
-      error_log('Drupal jsonlog failed to establish server\'s default log dir; site ID[' . $_site_id . '].');
+    if (!($_file = variable_get('jsonlog_file'))) {
+      if (!($_file = _jsonlog_default_file(TRUE))) {
+        error_log('Drupal jsonlog failed to establish server\'s default log dir; site ID[' . $_site_id . '].');
+      }
     }
 
     $_version = variable_get('jsonlog_format_version', 1);
