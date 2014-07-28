@@ -1,3 +1,7 @@
+jsonlog 7.x-1.x, 2014-07-28
+---------------------------
+* Establish default log dir when error_log directive is 'syslog'.
+
 jsonlog 7.x-1.x, 2014-07-24
 ---------------------------
 * Truncation. Fixed newline escaping (json_encode() doesn't escape control chars). Log to standard log if filing fails.
