@@ -261,6 +261,9 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
     $values['jsonlog_truncate'] = 0;
   }
 
+  // Test.
+  _jsonlog_test_filing($values['jsonlog_file']);
+
   // Don't ever save this field, which is only used as legend.
   unset($form_state['input']['jsonlog_fields']['legend'], $values['jsonlog_fields']['legend']);
 }
@@ -268,11 +271,9 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
 /**
  * Establish default site ID.
  *
- * @param boolean $save
- *   Default: FALSE (~ don't update conf var 'jsonlog_siteid').
  * @return string
  */
-function _jsonlog_default_site_id($save = FALSE) {
+function _jsonlog_default_site_id() {
   // Server's hostname + database name + database prefix (if any).
   $db =& $GLOBALS['databases']['default']['default'];
   $site_id = drupal_strtolower(preg_replace('/[^\w\d\.\-_]/', '-', gethostname()))
@@ -280,24 +281,16 @@ function _jsonlog_default_site_id($save = FALSE) {
     . (!$db['prefix'] ? '' : ('__' . $db['prefix']));
   unset($db); // Clear ref.
 
-  if ($save) {
-    variable_set('jsonlog_siteid', $site_id);
-  }
-
   return $site_id;
 }
 
 /**
  * Establish default logging file path.
  *
- * Does not update conf var 'jsonlog_file' (truthy arg $save) if the server's default logging dir can't be established.
- *
- * @param boolean $save
- *   Default: FALSE (~ don't update conf var 'jsonlog_file').
  * @return string
  *   Empty upon failure.
  */
-function _jsonlog_default_file($save = FALSE) {
+function _jsonlog_default_file() {
   // Default web server log dir for common *nix distributions.
   $default_log_dirs = array(
     'debian' => '/var/log/apache2',
@@ -317,17 +310,96 @@ function _jsonlog_default_file($save = FALSE) {
   else {
     $dir = str_replace('\\', '/', dirname($server_log));
   }
+
   if ($dir) {
-    $file = $dir . '/' . variable_get('jsonlog_siteid', _jsonlog_default_site_id()) . '.log.json';
+    return $dir . '/' . variable_get('jsonlog_siteid', _jsonlog_default_site_id()) . '.log.json';
+  }
+  return '';
+}
 
-    if ($save) {
-      variable_set('jsonlog_file', $file);
+/**
+ * Sets drupal message.
+ *
+ * @see _jsonlog_default_file()
+ *
+ * @param string $file
+ *   Default: empty (~ use default file location algo)
+ *
+ * @return boolean
+ */
+function _jsonlog_test_filing($file = '') {
+  if (!$file) {
+    if (!($file = variable_get('jsonlog_file'))) {
+      if (!($_file = _jsonlog_default_file())) {
+        drupal_set_message(t('jsonlog: Failed to establish the server\'s default logging directory.', array(), array('context' => 'module:jsonlog')), 'error');
+        return FALSE;
+      }
     }
-
-    return $file;
   }
 
-  return '';
+  $dir = dirname($file);
+  if ($dir === '') {
+    drupal_set_message(t('jsonlog: Log directory path name is empty.', array(), array('context' => 'module:jsonlog')), 'error');
+    return FALSE;
+  }
+  if (!file_exists($dir)) {
+    drupal_set_message(
+      t(
+        'jsonlog: Log directory \'!dir\' doesn\'t exist.',
+        array('!dir' => $dir),
+        array('context' => 'module:jsonlog')
+      ),
+      'error'
+    );
+    return FALSE;
+  }
+  if (!file_exists($file)) {
+    if (!touch($file)) {
+      drupal_set_message(
+        t(
+          'jsonlog: Failed to create log file \'!file\'.',
+          array('!file' => $file),
+          array('context' => 'module:jsonlog')
+        ),
+        'error'
+      );
+      return FALSE;
+    }
+  }
+  elseif (!is_writable($file)) {
+    drupal_set_message(
+      t(
+        'jsonlog: Cannot write to log file \'!file\'.',
+        array('!file' => $file),
+        array('context' => 'module:jsonlog')
+      ),
+      'error'
+    );
+    return FALSE;
+  }
+
+  try {
+    watchdog(
+      'jsonlog',
+      'Testing watchdog logging - please check if this entry was written to file \'!file\'.',
+      array('!file' => $file),
+      variable_get('jsonlog_severity_threshold', WATCHDOG_WARNING)
+    );
+  }
+  catch (Exception $xc) {
+    // Ignore; some watchdog implementation failed, and (probably) threw a (database) PDOException.
+  }
+
+  drupal_set_message(
+    t(
+      'jsonlog: Logging to \'!file\' seems to work, please if that file now contains an entry whose message starts with \'Testing watchdog logging\'.',
+      array('!file' => $file),
+      array('context' => 'module:jsonlog')
+    ),
+    'warning'
+  );
+
+  return TRUE;
 }
 
 /**
@@ -350,7 +422,7 @@ function jsonlog_watchdog(array $log_entry) {
   if (!$_site_id) {
     // If site ID setting doesnt exist: get default (and save it).
     if (!($_site_id = variable_get('jsonlog_siteid'))) {
-      $_site_id = _jsonlog_default_site_id(TRUE);
+      variable_set('jsonlog_siteid', $_site_id = _jsonlog_default_site_id());
     }
 
     if (($_truncate = variable_get('jsonlog_truncate', JSONLOG_TRUNCATE_DEFAULT))) {
@@ -364,7 +436,10 @@ function jsonlog_watchdog(array $log_entry) {
 
     // If file setting doesnt exist: get default (and save it).
     if (!($_file = variable_get('jsonlog_file'))) {
-      if (!($_file = _jsonlog_default_file(TRUE))) {
+      if (($_file = _jsonlog_default_file())) {
+        variable_set('jsonlog_file', $_file);
+      }
+      else {
         error_log('Drupal jsonlog failed to establish server\'s default log dir; site ID[' . $_site_id . '].');
       }
     }
@@ -411,7 +486,8 @@ function jsonlog_watchdog(array $log_entry) {
     $message = strip_tags($message);
   }
   // Escape newline, (drupal_)json_encode() doesn't escape control characters (Inspect uses newline).
-  $message = str_replace("\n", '\\n', $message);
+  // Escape null control char.
+  $message = str_replace(array("\n", "\0"), array('\\n', '_NUL_'), $message);
 
   // If truncation required, start by skipping variables.
   $variables = $log_entry['variables'];
@@ -470,13 +546,7 @@ function jsonlog_watchdog(array $log_entry) {
 
 
   // File append. If failure: log filing error to web server's default log.
-  if (($handle = fopen($_file, 'a'))) {
-    if (!fwrite($handle, "\n" . drupal_json_encode($entry))) {
-      error_log('Drupal jsonlog failed to write to file[' . $_file . ']; site ID[' . $_site_id . '].');
-    }
-    fclose($handle);
-  }
-  else {
-    error_log('Drupal jsonlog failed to open file[' . $_file . ']; site ID[' . $_site_id . '].');
+  if (!file_put_contents($_file, "\n" . drupal_json_encode($entry), FILE_APPEND)) {
+    error_log('Drupal jsonlog failed to write to file[' . $_file . ']; site ID[' . $_site_id . '].');
   }
 }

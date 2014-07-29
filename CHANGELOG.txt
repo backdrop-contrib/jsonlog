@@ -1,3 +1,9 @@
+jsonlog 7.x-1.x, 2014-07-29
+---------------------------
+* Remove null byte.
+* Test write when user submits the logging settings form.
+* Use file_put_contents() instead of fopen+fwrite+fclose().
+
 jsonlog 7.x-1.x, 2014-07-28
 ---------------------------
 * Establish default log dir when error_log directive is 'syslog'.
