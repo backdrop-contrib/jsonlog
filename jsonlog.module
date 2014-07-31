@@ -440,7 +440,7 @@ function jsonlog_watchdog(array $log_entry) {
         variable_set('jsonlog_file', $_file);
       }
       else {
-        error_log('Drupal jsonlog failed to establish server\'s default log dir; site ID[' . $_site_id . '].');
+        error_log('Drupal jsonlog, site ID[' . $_site_id . '], failed to establish server\'s default log dir.');
       }
     }
 
@@ -547,6 +547,6 @@ function jsonlog_watchdog(array $log_entry) {
 
   // File append. If failure: log filing error to web server's default log.
   if (!file_put_contents($_file, "\n" . drupal_json_encode($entry), FILE_APPEND)) {
-    error_log('Drupal jsonlog failed to write to file[' . $_file . ']; site ID[' . $_site_id . '].');
+    error_log('Drupal jsonlog, site ID[' . $_site_id . '], failed to write to file[' . $_file . '].');
   }
 }
