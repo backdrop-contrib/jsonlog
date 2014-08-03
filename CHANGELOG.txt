@@ -1,3 +1,7 @@
+jsonlog 7.x-1.x, 2014-08-03
+---------------------------
+* Use API drupal_truncate_bytes instead of custom multibyte truncation algo.
+
 jsonlog 7.x-1.x, 2014-07-29
 ---------------------------
 * Remove null byte.
