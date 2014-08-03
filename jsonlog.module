@@ -494,27 +494,20 @@ function jsonlog_watchdog(array $log_entry) {
 
   // Truncate message.
   if ($_truncate && ($le = strlen($message)) > $_truncate) { // Deliberately not drupal_strlen(); need 'physical' length, not (possibly shorter) multibyte length.
-    $truncation = array($le);
     // Flag variables truncated by setting it to false.
     if ($variables) {
       $variables = FALSE;
     }
     // Truncate multibyte safe until ASCII length is equal to/less than max. byte length.
-    // ~ minus 10%, 30%, 50%, 70%.
-    $limit = 4;
-    $percent = 10;
-    do {
-      --$limit;
-      $le = strlen( // Deliberately not drupal_strlen(); need 'physical' length, not (possibly shorter) multibyte length.
-        $message = drupal_substr($message, 0, floor($_truncate * (100 - $percent) / 100))
-      );
-      $percent += 20;
-    } while($limit > 0 && $le > $_truncate);
-    $truncation[] = $le;
+    $truncation = array(
+      $le,
+      strlen($message = drupal_truncate_bytes($message, (int) $_truncate))
+    );
   }
   else {
     $truncation = NULL;
   }
+
   $entry->{$_fields['message']} = $message;
   unset($message);
 
