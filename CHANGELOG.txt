@@ -1,3 +1,7 @@
+jsonlog 7.x-1.x, 2014-08-06
+---------------------------
+* Fixed that test write didn't write effectively didn't write to the location to be tested.
+
 jsonlog 7.x-1.x, 2014-08-03
 ---------------------------
 * Use API drupal_truncate_bytes instead of custom multibyte truncation algo.

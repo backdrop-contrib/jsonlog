@@ -378,6 +378,10 @@ function _jsonlog_test_filing($file = '') {
     return FALSE;
   }
 
+  // Temporarily set the conf var to test value
+  // - otherwise jsonlog_watchdog() would still use the old value for this write.
+  $original_file = variable_get('jsonlog_file', '');
+  variable_set('jsonlog_file', $file);
   try {
     watchdog(
       'jsonlog',
@@ -389,10 +393,12 @@ function _jsonlog_test_filing($file = '') {
   catch (Exception $xc) {
     // Ignore; some watchdog implementation failed, and (probably) threw a (database) PDOException.
   }
+  // Restore original value.
+  variable_set('jsonlog_file', $original_file);
 
   drupal_set_message(
     t(
-      'jsonlog: Logging to \'!file\' seems to work, please if that file now contains an entry whose message starts with \'Testing watchdog logging\'.',
+      'jsonlog: Logging to \'!file\' seems to work, please check if that file now contains an entry whose message starts with \'Testing watchdog logging\'.',
       array('!file' => $file),
       array('context' => 'module:jsonlog')
     ),
