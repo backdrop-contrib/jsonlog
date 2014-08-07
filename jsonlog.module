@@ -25,6 +25,9 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
     array('type' => 'file', 'group' => CSS_DEFAULT, 'preprocess' => FALSE, 'every_page' => FALSE)
   );
 
+  // Server environment vars are used and overrule everything, if server var 'drupal_jsonlog_server_conf'.
+  $server_conf = getenv('drupal_jsonlog_server_conf') ? 1 : 0;
+
   // Defaults.
   $siteid_default = _jsonlog_default_site_id();
   if (!($file_default = _jsonlog_default_file())) {
@@ -34,16 +37,26 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
   // This translation is used a lot.
   $t_siteId = t('Site ID', array(), array('context' => 'module:jsonlog'));
 
+  // Using emergency as threshold is simply not an option; because it's falsy (expensive type checks, FALSE), and wouldn't make sense anyway.
+  $severity_levels = watchdog_severity_levels();
+  unset($severity_levels[0]);
+
   $form['jsonlog'] = array(
     '#type' => 'fieldset',
     '#title' => 'JSON Log',
+    '#description' => (!$server_conf ? t('Set server environment variable \'drupal_jsonlog_server_conf\' to prevent local admins from configuring JSON Log.', array(), array('context' => 'module:jsonlog')) :
+        t('The server environment variable \'drupal_jsonlog_server_conf\' is set, so JSON Log is not configurable via this form (nor by Drupal conf vars as such).', array(), array('context' => 'module:jsonlog'))
+      )
+      . '<br/>' . t('Tip: A server environment variable set in virtual host or .htaccess won\'t be visible by drush/CLI; /etc/environment might be your friend instead.', array('!break' => '<br/>'), array('context' => 'module:jsonlog')),
     '#collapsible' => TRUE,
     '#collapsed' => FALSE,
     'jsonlog_severity_threshold' => array(
       '#type' => 'select',
       '#title' => t('Don\'t log events that are less severe than', array(), array('context' => 'module:jsonlog')),
-      '#options' => watchdog_severity_levels(),
-      '#default_value' => variable_get('jsonlog_severity_threshold', WATCHDOG_WARNING),
+      '#description' => t('Emergency is not an option.', array(), array('context' => 'module:jsonlog')),
+      '#options' => $severity_levels,
+      '#default_value' => $server_conf && ($v = getenv('drupal_jsonlog_severity_threshold')) ? $v :
+          variable_get('jsonlog_severity_threshold', WATCHDOG_WARNING),
       '#attributes' => array(
         'autocomplete' => 'off',
       ),
@@ -59,7 +72,8 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
         ),
         array('context' => 'module:jsonlog')
       ),
-      '#default_value' => variable_get('jsonlog_truncate', JSONLOG_TRUNCATE_DEFAULT),
+      '#default_value' => $server_conf && ($v = getenv('drupal_jsonlog_truncate')) !== FALSE ? $v :
+          variable_get('jsonlog_truncate', JSONLOG_TRUNCATE_DEFAULT),
       '#size' => 5,
       '#field_suffix' => t('Kb', array(), array('context' => 'module:jsonlog')),
       '#attributes' => array(
@@ -77,7 +91,7 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
         ),
         array('context' => 'module:jsonlog')
       ),
-      '#default_value' => variable_get('jsonlog_siteid', $siteid_default),
+      '#default_value' => $server_conf && ($v = getenv('drupal_jsonlog_siteid')) ? $v : variable_get('jsonlog_siteid', $siteid_default),
       '#attributes' => array(
         'autocomplete' => 'off',
       ),
@@ -86,7 +100,7 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
       '#type' => 'textfield',
       '#title' => t('Log file'),
       '#description' => t(
-        'Defaults to PHP ini \'error_log\' path + !site_id:!break!default!breakNB: The web server user (www-data|apache) may not be allowed to write to a (new) file in the \'error_log\' path!break- create the file as root user, and do a chown or chmod.',
+        'Defaults to PHP ini \'error_log\' path + /drupal-jsonlog/ + !site_id:!break!default!breakNB: The web server user (www-data|apache) probably isn\'t allowed to write to a file in the \'error_log\' path!break- create a sub dir (like \'drupal-jsonlog\') as root user, and do a chown or chmod on that sub dir.',
         array(
           '!default' => '&nbsp; ' . $file_default,
           '!site_id' => $t_siteId,
@@ -94,7 +108,7 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
         ),
         array('context' => 'module:jsonlog')
       ),
-      '#default_value' => variable_get('jsonlog_file', $file_default),
+      '#default_value' => $server_conf && ($v = getenv('drupal_jsonlog_file')) ? $v : variable_get('jsonlog_file', $file_default),
       '#size' => 100,
       '#attributes' => array(
         'autocomplete' => 'off',
@@ -104,7 +118,7 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
       '#type' => 'textfield',
       '#title' => t('JSON format version'),
       '#description' => t('Version no. of the fields format out-lined below.'),
-      '#default_value' => variable_get('jsonlog_format_version', 1),
+      '#default_value' => $server_conf && ($v = getenv('drupal_jsonlog_format_version')) ? $v : variable_get('jsonlog_format_version', 1),
       '#size' => 10,
       '#attributes' => array(
         'autocomplete' => 'off',
@@ -135,6 +149,15 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
       ),
     ),
   );
+  // All readonly if server environment conf.
+  if ($server_conf) {
+    foreach ($form['jsonlog'] as $key => &$field) {
+      if ($key{0} !== '#') {
+        $field['#attributes']['disabled'] = 'disabled';
+      }
+    }
+    unset($field); // Iteration ref.
+  }
 
   // Make ISO 8601 timestamp for timestamp label.
   $millis = round(microtime(TRUE) * 1000);
@@ -222,12 +245,15 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
       '#default_value' => !empty($field_names[$name]) ? $field_names[$name] : (!empty($props['name']) ? $props['name'] : $name),
       '#field_prefix' => empty($props['custom']) ? $name : '&nbsp;',
       '#field_suffix' => !empty($props['name']) ? $props['name'] : '&nbsp;',
-      '#required' => TRUE,
+      '#required' => !$server_conf,
       '#size' => 15,
       '#attributes' => array(
         'autocomplete' => 'off',
       ),
     );
+    if ($server_conf) {
+      $form['jsonlog']['jsonlog_fields'][$name]['#attributes']['disabled'] = 'disabled';
+    }
   }
 
   // Prepend our submit handler; we need to get in first, otherwise our changes to form values amounts to nothing.
@@ -241,7 +267,6 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
 function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
   $values =& $form_state['values'];
 
-  // Trim all values.
   $fields = array(
     'jsonlog_severity_threshold',
     'jsonlog_truncate',
@@ -249,23 +274,38 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
     'jsonlog_file',
     'jsonlog_format_version',
   );
-  foreach ($fields as $name) {
-    $values[$name] = trim($values[$name]);
-  }
-  foreach ($values['jsonlog_fields'] as &$value) {
-    $value = trim($value);
-  }
-  unset($value); // Iteration ref.
 
-  if (!$values['jsonlog_truncate'] || $values['jsonlog_truncate'] < 0) {
-    $values['jsonlog_truncate'] = 0;
+  // If server environment vars rule: don't save any var.
+  if (getenv('drupal_jsonlog_server_conf')) {
+    foreach ($fields as $name) {
+      unset($form_state['input'][$name], $values[$name]);
+    }
+    unset($form_state['input']['jsonlog_fields'], $values['jsonlog_fields']);
+
+    $file = _jsonlog_default_file();
+  }
+  // Otherwise: trim all values.
+  else {
+    foreach ($fields as $name) {
+      $values[$name] = trim($values[$name]);
+    }
+    foreach ($values['jsonlog_fields'] as &$value) {
+      $value = trim($value);
+    }
+    unset($value); // Iteration ref.
+
+    if (!$values['jsonlog_truncate'] || $values['jsonlog_truncate'] < 0) {
+      $values['jsonlog_truncate'] = 0;
+    }
+
+    // Don't ever save this field, which is only used as legend.
+    unset($form_state['input']['jsonlog_fields']['legend'], $values['jsonlog_fields']['legend']);
+
+    $file = $values['jsonlog_file'];
   }
 
   // Test.
-  _jsonlog_test_filing($values['jsonlog_file']);
-
-  // Don't ever save this field, which is only used as legend.
-  unset($form_state['input']['jsonlog_fields']['legend'], $values['jsonlog_fields']['legend']);
+  _jsonlog_test_filing($file);
 }
 
 /**
@@ -274,6 +314,10 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
  * @return string
  */
 function _jsonlog_default_site_id() {
+  if (getenv('drupal_jsonlog_server_conf') && ($site_id = getenv('drupal_jsonlog_siteid'))) {
+    return $site_id;
+  }
+
   // Server's hostname + database name + database prefix (if any).
   $db =& $GLOBALS['databases']['default']['default'];
   $site_id = drupal_strtolower(preg_replace('/[^\w\d\.\-_]/', '-', gethostname()))
@@ -291,6 +335,10 @@ function _jsonlog_default_site_id() {
  *   Empty upon failure.
  */
 function _jsonlog_default_file() {
+  if (getenv('drupal_jsonlog_server_conf') && ($file = getenv('drupal_jsonlog_file'))) {
+    return $file;
+  }
+
   // Default web server log dir for common *nix distributions.
   $default_log_dirs = array(
     'debian' => '/var/log/apache2',
@@ -312,7 +360,7 @@ function _jsonlog_default_file() {
   }
 
   if ($dir) {
-    return $dir . '/' . variable_get('jsonlog_siteid', _jsonlog_default_site_id()) . '.log.json';
+    return $dir . '/drupal-jsonlog/' . variable_get('jsonlog_siteid', _jsonlog_default_site_id()) . '.log.json';
   }
   return '';
 }
@@ -394,11 +442,14 @@ function _jsonlog_test_filing($file = '') {
     // Ignore; some watchdog implementation failed, and (probably) threw a (database) PDOException.
   }
   // Restore original value.
-  variable_set('jsonlog_file', $original_file);
+  // Except if server env. vars rules, then we must (oddly) keep the new value.
+  if (!getenv('drupal_jsonlog_server_conf')) {
+    variable_set('jsonlog_file', $original_file);
+  }
 
   drupal_set_message(
     t(
-      'jsonlog: Logging to \'!file\' seems to work, please check if that file now contains an entry whose message starts with \'Testing watchdog logging\'.',
+      'jsonlog: Logging to \'!file\' seems to work, but please check if that file now contains an entry whose message starts with \'Testing watchdog logging\'.',
       array('!file' => $file),
       array('context' => 'module:jsonlog')
     ),
@@ -414,11 +465,22 @@ function _jsonlog_test_filing($file = '') {
  * @param array $log_entry
  */
 function jsonlog_watchdog(array $log_entry) {
-  static $_threshold, $_truncate, $_site_id, $_file, $_version, $_fields, $_severity;
+  static $_server_conf, $_threshold, $_truncate, $_site_id, $_file, $_version, $_fields, $_severity;
 
   // Don't load more settings than threshold, in case current entry isn't sufficiently severe.
   if ($_threshold === NULL) {
-    $_threshold = variable_get('jsonlog_severity_threshold', WATCHDOG_WARNING);
+    // Server environment variables rule?
+    // Except siteid and file will always be overridable by Drupal conf var, because the default is conditioned by context.
+    $_server_conf = getenv('drupal_jsonlog_server_conf');
+
+    if ($_server_conf) {
+      if (!($_threshold = getenv('drupal_jsonlog_severity_threshold'))) {
+        $_threshold = WATCHDOG_WARNING;
+      }
+      else {
+        $_threshold = variable_get('jsonlog_severity_threshold', WATCHDOG_WARNING);
+      }
+    }
   }
   if ($log_entry['severity'] > $_threshold) { // Severity is upside down; less is more.
     return;
@@ -426,12 +488,26 @@ function jsonlog_watchdog(array $log_entry) {
 
   // Load the rest of the settings.
   if (!$_site_id) {
-    // If site ID setting doesnt exist: get default (and save it).
+    // If site ID setting doesnt exist: get default (and save it - even if server vars rule).
     if (!($_site_id = variable_get('jsonlog_siteid'))) {
-      variable_set('jsonlog_siteid', $_site_id = _jsonlog_default_site_id());
+      if ($_server_conf && ($_site_id = getenv('drupal_jsonlog_siteid'))) {
+        variable_set('jsonlog_siteid', $_site_id);
+      }
+      else {
+        variable_set('jsonlog_siteid', $_site_id = _jsonlog_default_site_id());
+      }
     }
 
-    if (($_truncate = variable_get('jsonlog_truncate', JSONLOG_TRUNCATE_DEFAULT))) {
+    // Truncate.
+    if ($_server_conf) {
+      if (($_truncate = getenv('drupal_jsonlog_truncate')) === FALSE) {
+        $_truncate = JSONLOG_TRUNCATE_DEFAULT;
+      }
+    }
+    else {
+      $_truncate = variable_get('jsonlog_truncate', JSONLOG_TRUNCATE_DEFAULT);
+    }
+    if ($_truncate) {
       // Kb to bytes.
       $_truncate *= 1024;
       // Substract estimated max length of everything but message content.
@@ -440,9 +516,9 @@ function jsonlog_watchdog(array $log_entry) {
       $_truncate *= 7 / 8;
     }
 
-    // If file setting doesnt exist: get default (and save it).
+    // If file setting doesnt exist: get default (and save it - even if server vars rule).
     if (!($_file = variable_get('jsonlog_file'))) {
-      if (($_file = _jsonlog_default_file())) {
+      if (($_server_conf && ($_file = getenv('drupal_jsonlog_file'))) || ($_file = _jsonlog_default_file())) {
         variable_set('jsonlog_file', $_file);
       }
       else {
@@ -450,8 +526,8 @@ function jsonlog_watchdog(array $log_entry) {
       }
     }
 
-    $_version = variable_get('jsonlog_format_version', 1);
-    $_fields = variable_get('jsonlog_fields', array(
+    // Fields and (rubbish) version.
+    $_fields = array(
       'message' => 'message',
       'timestamp' => '@timestamp',
       'version' => '@version',
@@ -468,17 +544,29 @@ function jsonlog_watchdog(array $log_entry) {
       'link' => 'link',
       'variables' => 'variables',
       'truncation' => 'trunc',
-    ));
+    );
+    if ($_server_conf) {
+      if (!($_version = getenv('drupal_jsonlog_format_version'))) {
+        $_version = 1;
+      }
+      if (($fields = getenv('drupal_jsonlog_fields')) && ($fields = unserialize($fields))) {
+        $_fields = $fields;
+      }
+    }
+    else {
+      $_version = variable_get('jsonlog_format_version', 1);
+      $_fields = variable_get('jsonlog_fields', $_fields);
+    }
 
     $_severity = array(
-      WATCHDOG_EMERGENCY => 'emergency',
-      WATCHDOG_ALERT => 'alert',
-      WATCHDOG_CRITICAL => 'critical',
-      WATCHDOG_ERROR => 'error',
-      WATCHDOG_WARNING => 'warning',
-      WATCHDOG_NOTICE => 'notice',
-      WATCHDOG_INFO => 'info',
-      WATCHDOG_DEBUG => 'debug',
+      'emergency',
+      'alert',
+      'critical',
+      'error',
+      'warning',
+      'notice',
+      'info',
+      'debug',
     );
   }
 
