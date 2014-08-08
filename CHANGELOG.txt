@@ -1,3 +1,7 @@
+jsonlog 7.x-1.x, 2014-08-08
+---------------------------
+* Use server environment vars instead of Drupal conf vars, if server env.var 'drupal_jsonlog_server_conf' is set.
+
 jsonlog 7.x-1.x, 2014-08-06
 ---------------------------
 * Fixed that test write didn't write effectively didn't write to the location to be tested.

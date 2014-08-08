@@ -6,6 +6,9 @@
 div.form-item.form-type-textfield.form-item-jsonlog-truncate > input {
   text-align: right;
 }
+div.fieldset-description {
+  padding-bottom: 1em;
+}
 fieldset#edit-jsonlog-fields div.fieldset-legend {
   background: none;
   text-transform: none;
@@ -18,9 +21,6 @@ fieldset#edit-jsonlog-fields div.fieldset-wrapper > div:nth-child(even) {
 }
 fieldset#edit-jsonlog-fields div.fieldset-wrapper > div:last-child {
   border-bottom: 0.2em solid #f3f4ee;
-}
-fieldset#edit-jsonlog-fields div.fieldset-wrapper > div.fieldset-description {
-  padding-bottom: 1em;
 }
 fieldset#edit-jsonlog-fields div.fieldset-wrapper > div.form-item.form-type-textfield {
   margin: 0;
@@ -53,10 +53,15 @@ fieldset#edit-jsonlog-fields div.fieldset-wrapper > div.form-item.form-type-text
   -webkit-user-select: none;
   -ms-user-select: none;
 }
-fieldset#edit-jsonlog-fields div.fieldset-wrapper > div.form-item.form-type-textfield > input[readonly='readonly'] {
+fieldset#edit-jsonlog-fields div.fieldset-wrapper > div.form-item.form-type-textfield.form-item-jsonlog-fields-legend > input[readonly='readonly'] {
   background-color: transparent;
   cursor: default;
   -moz-user-select: none;
   -webkit-user-select: none;
   -ms-user-select: none;
+}
+fieldset#edit-jsonlog div.form-disabled input[type='text'],
+fieldset#edit-jsonlog div.form-disabled select,
+fieldset#edit-jsonlog div.form-disabled option {
+  color: #333;
 }
