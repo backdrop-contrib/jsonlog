@@ -84,7 +84,7 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
       '#type' => 'textfield',
       '#title' => $t_siteId,
       '#description' => t(
-        'Spaces and quotes gets replaced by hyphens.!breakDefaults to the server\'s hostname and the site\'s database name and prefix (if any):!break!default',
+        'Spaces and quotes get replaced by hyphens.!breakDefaults to the server\'s hostname and the site\'s database name and prefix (if any):!break!default',
         array(
           '!default' => '&nbsp; ' . $siteid_default,
           '!break' => '<br/>',
