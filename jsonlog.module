@@ -4,6 +4,12 @@
  * JSON Log module.
  */
 
+// @todo: JSON field names and sequence shan't be configurable.
+// @todo: Implement tags, as comma-separated -> array.
+// @todo: Implement http host field (empty in CLI/drush mode, but anyway).
+// @todo: version shan't be configurable (probably won't ever be changed anyway).
+// @todo: consider implementing site_name field (very Drupal, but probably rather useless).
+
 /**
  * Default max. length of a log entry, in kilobytes.
  *
