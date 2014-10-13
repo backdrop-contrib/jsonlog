@@ -7,7 +7,7 @@
 // @todo: JSON field names and sequence shan't be configurable.
 // @todo: Implement tags, as comma-separated -> array.
 // @todo: Implement http host field (empty in CLI/drush mode, but anyway).
-// @todo: version shan't be configurable (probably won't ever be changed anyway).
+// @todo: version shan't be configurable (probably won't ever be changed anyway). - OK
 // @todo: consider implementing site_name field (very Drupal, but probably rather useless).
 
 /**
@@ -120,16 +120,6 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
         'autocomplete' => 'off',
       ),
     ),
-    'jsonlog_format_version' => array(
-      '#type' => 'textfield',
-      '#title' => t('JSON format version'),
-      '#description' => t('Version no. of the fields format out-lined below.'),
-      '#default_value' => $server_conf && ($v = getenv('drupal_jsonlog_format_version')) ? $v : variable_get('jsonlog_format_version', 1),
-      '#size' => 10,
-      '#attributes' => array(
-        'autocomplete' => 'off',
-      ),
-    ),
     'jsonlog_fields' => array(
       '#type' => 'fieldset',
       '#title' => t('JSON field names', array(), array('context' => 'module:jsonlog')),
@@ -176,15 +166,18 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
   $json_fields = array(
     'message' => array(
       'label' => t('Message', array(), array('context' => 'module:jsonlog')),
+      'value' => t('Some message', array(), array('context' => 'module:jsonlog')),
     ),
     'timestamp' => array(
-      'label' => t('Timestamp !span(!time)!_span', array('!time' => $timestamp, '!span' => '<span>', '!_span' => '</span>'), array('context' => 'module:jsonlog')),
+      'label' => t('Timestamp', array(), array('context' => 'module:jsonlog')),
       'name' => '@timestamp',
+      'value' => $timestamp,
     ),
     'version' => array(
       'custom' => TRUE,
       'name' => '@version',
-      'label' => t('Version !span(of this format)!_span', array('!span' => '<span>', '!_span' => '</span>'), array('context' => 'module:jsonlog')),
+      'label' => t('Version', array(), array('context' => 'module:jsonlog')),
+      'value' => 1,
     ),
     'event_id' => array(
       'custom' => TRUE,
@@ -194,6 +187,7 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
         array('!site_id' => $t_siteId, '!span' => '<span>', '!_span' => '</span>'),
         array('context' => 'module:jsonlog')
       ),
+      'value' => 1,
     ),
     'site_id' => array(
       'custom' => TRUE,
@@ -242,13 +236,38 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
     ),
   );
 
-  $field_names = variable_get('jsonlog_fields', array());
+  // Table view of registered service endpoint methods.
+  $table_header = array(
+    t('Property', array(), array('context' => 'module:jsonlog')),
+    t('Field name', array(), array('context' => 'module:restmini_service')),
+    t('Example', array(), array('context' => 'module:restmini_service')),
+  );
+  $table_rows = array();
 
   foreach ($json_fields as $name => $props) {
+
+    $row = array(
+      'data' => array(
+        $props['label'],
+        !empty($props['name']) ? $props['name'] : $name,
+      ),
+    );
+
+    $table_rows[] = $row;
+
+    $table_rows[] = array(
+      'data' => array(
+        $props['label'],
+        !empty($props['name']) ? $props['name'] : $name,
+        $endpoint_name,
+      ),
+    );
+
+
     $form['jsonlog']['jsonlog_fields'][$name] = array(
       '#type' => 'textfield',
       '#title' => $props['label'],
-      '#default_value' => !empty($field_names[$name]) ? $field_names[$name] : (!empty($props['name']) ? $props['name'] : $name),
+      '#default_value' => !empty($props['name']) ? $props['name'] : $name,
       '#field_prefix' => empty($props['custom']) ? $name : '&nbsp;',
       '#field_suffix' => !empty($props['name']) ? $props['name'] : '&nbsp;',
       '#required' => !$server_conf,
@@ -278,7 +297,6 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
     'jsonlog_truncate',
     'jsonlog_siteid',
     'jsonlog_file',
-    'jsonlog_format_version',
   );
 
   // If server environment vars rule: don't save any var.
@@ -286,7 +304,6 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
     foreach ($fields as $name) {
       unset($form_state['input'][$name], $values[$name]);
     }
-    unset($form_state['input']['jsonlog_fields'], $values['jsonlog_fields']);
 
     $file = _jsonlog_default_file();
   }
@@ -295,17 +312,10 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
     foreach ($fields as $name) {
       $values[$name] = trim($values[$name]);
     }
-    foreach ($values['jsonlog_fields'] as &$value) {
-      $value = trim($value);
-    }
-    unset($value); // Iteration ref.
 
     if (!$values['jsonlog_truncate'] || $values['jsonlog_truncate'] < 0) {
       $values['jsonlog_truncate'] = 0;
     }
-
-    // Don't ever save this field, which is only used as legend.
-    unset($form_state['input']['jsonlog_fields']['legend'], $values['jsonlog_fields']['legend']);
 
     $file = $values['jsonlog_file'];
   }
@@ -471,7 +481,7 @@ function _jsonlog_test_filing($file = '') {
  * @param array $log_entry
  */
 function jsonlog_watchdog(array $log_entry) {
-  static $_server_conf, $_threshold, $_truncate, $_site_id, $_file, $_version, $_fields, $_severity;
+  static $_server_conf, $_threshold, $_truncate, $_site_id, $_file, $_severity;
 
   // Don't load more settings than threshold, in case current entry isn't sufficiently severe.
   if ($_threshold === NULL) {
@@ -480,6 +490,7 @@ function jsonlog_watchdog(array $log_entry) {
     $_server_conf = getenv('drupal_jsonlog_server_conf');
 
     if ($_server_conf) {
+      // A threshold of zero (emergency) wouldnt make sense in the real world, so no reason check by type (false).
       if (!($_threshold = getenv('drupal_jsonlog_severity_threshold'))) {
         $_threshold = WATCHDOG_WARNING;
       }
@@ -488,13 +499,15 @@ function jsonlog_watchdog(array $log_entry) {
       }
     }
   }
-  if ($log_entry['severity'] > $_threshold) { // Severity is upside down; less is more.
+  // Severity is upside down; less is more.
+  if ($log_entry['severity'] > $_threshold) {
     return;
   }
 
   // Load the rest of the settings.
   if (!$_site_id) {
-    // If site ID setting doesnt exist: get default (and save it - even if server vars rule).
+    // If site ID setting doesnt exist: get default.
+    // And save it - even if server vars rule.
     if (!($_site_id = variable_get('jsonlog_siteid'))) {
       if ($_server_conf && ($_site_id = getenv('drupal_jsonlog_siteid'))) {
         variable_set('jsonlog_siteid', $_site_id);
@@ -530,38 +543,6 @@ function jsonlog_watchdog(array $log_entry) {
       else {
         error_log('Drupal jsonlog, site ID[' . $_site_id . '], failed to establish server\'s default log dir.');
       }
-    }
-
-    // Fields and (rubbish) version.
-    $_fields = array(
-      'message' => 'message',
-      'timestamp' => '@timestamp',
-      'version' => '@version',
-      'event_id' => 'event_id',
-      'site_id' => 'site_id',
-      'type' => 'type',
-      'severity' => 'severity',
-      'method' => 'method',
-      'request_uri' => 'request_uri',
-      'referer' => 'referer',
-      'uid' => 'uid',
-      'username' => 'username',
-      'ip' => 'client_ip',
-      'link' => 'link',
-      'variables' => 'variables',
-      'truncation' => 'trunc',
-    );
-    if ($_server_conf) {
-      if (!($_version = getenv('drupal_jsonlog_format_version'))) {
-        $_version = 1;
-      }
-      if (($fields = getenv('drupal_jsonlog_fields')) && ($fields = unserialize($fields))) {
-        $_fields = $fields;
-      }
-    }
-    else {
-      $_version = variable_get('jsonlog_format_version', 1);
-      $_fields = variable_get('jsonlog_fields', $_fields);
     }
 
     $_severity = array(
@@ -608,7 +589,7 @@ function jsonlog_watchdog(array $log_entry) {
     $truncation = NULL;
   }
 
-  $entry->{$_fields['message']} = $message;
+  $entry->message = $message;
   unset($message);
 
   // Use a milliseconds timestamp instead of watchdog()'s seconds timestamp.
@@ -616,26 +597,26 @@ function jsonlog_watchdog(array $log_entry) {
   $seconds = (int) floor($millis / 1000);
   $millis -= $seconds * 1000;
   $millis = str_pad($millis, 3, '0', STR_PAD_LEFT);
-  $entry->{$_fields['timestamp']} = substr(gmdate('c', $seconds), 0, 19) . '.' . $millis . 'Z';
+  $entry->{'@timestamp'} = substr(gmdate('c', $seconds), 0, 19) . '.' . $millis . 'Z';
 
-  $entry->{$_fields['version']} = $_version;
-  $entry->{$_fields['event_id']} = uniqid($_site_id, TRUE);
-  $entry->{$_fields['site_id']} = $_site_id;
-  $entry->{$_fields['type']} = $log_entry['type'];
+  $entry->{'@version'} = 1;
+  $entry->event_id = uniqid($_site_id, TRUE);
+  $entry->site_id = $_site_id;
+  $entry->type = $log_entry['type'];
 
-  $entry->{$_fields['severity']} = $_severity[$log_entry['severity']];
+  $entry->severity = $_severity[$log_entry['severity']];
 
-  $entry->{$_fields['method']} = !empty($_SERVER['REQUEST_METHOD']) ? $_SERVER['REQUEST_METHOD'] : 'cli';
-  $entry->{$_fields['request_uri']} = $log_entry['request_uri'];
-  $entry->{$_fields['referer']} = $log_entry['referer'];
+  $entry->method = !empty($_SERVER['REQUEST_METHOD']) ? $_SERVER['REQUEST_METHOD'] : 'cli';
+  $entry->request_uri = $log_entry['request_uri'];
+  $entry->referer = $log_entry['referer'];
 
-  $entry->{$_fields['uid']} = $uid = $log_entry['uid'];
-  $entry->{$_fields['username']} = $uid && !empty($GLOBALS['user']->name) ? $GLOBALS['user']->name : '';
+  $entry->uid = $uid = $log_entry['uid'];
+  $entry->username = $uid && !empty($GLOBALS['user']->name) ? $GLOBALS['user']->name : '';
 
-  $entry->{$_fields['ip']} = $log_entry['ip'];
-  $entry->{$_fields['link']} = !$log_entry['link'] ? NULL : strip_tags($log_entry['link']);
-  $entry->{$_fields['variables']} = $variables;
-  $entry->{$_fields['truncation']} = $truncation;
+  $entry->client_ip = $log_entry['ip'];
+  $entry->link = !$log_entry['link'] ? NULL : strip_tags($log_entry['link']);
+  $entry->variables = $variables;
+  $entry->trunc = $truncation;
 
 
   // File append. If failure: log filing error to web server's default log.
