@@ -4,10 +4,8 @@
  * JSON Log module.
  */
 
-// @todo: JSON field names and sequence shan't be configurable.
 // @todo: Implement tags, as comma-separated -> array.
 // @todo: Implement http host field (empty in CLI/drush mode, but anyway).
-// @todo: version shan't be configurable (probably won't ever be changed anyway). - OK
 // @todo: consider implementing site_name field (very Drupal, but probably rather useless).
 
 /**
@@ -31,129 +29,173 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
     array('type' => 'file', 'group' => CSS_DEFAULT, 'preprocess' => FALSE, 'every_page' => FALSE)
   );
 
-  // Server environment vars are used and overrule everything, if server var 'drupal_jsonlog_server_conf'.
-  $server_conf = getenv('drupal_jsonlog_server_conf') ? 1 : 0;
-
   // Defaults.
   $siteid_default = _jsonlog_default_site_id();
   if (!($file_default = _jsonlog_default_file())) {
     drupal_set_message(t('Failed to establish the server\'s default logging directory.', array(), array('context' => 'module:jsonlog')), 'error');
   }
 
-  // This translation is used a lot.
+  // These translations are used a lot.
   $t_siteId = t('Site ID', array(), array('context' => 'module:jsonlog'));
+  $t_overridden = t('¡overridden! ', array(), array('context' => 'module:jsonlog'));
 
-  // Using emergency as threshold is simply not an option; because it's falsy (expensive type checks, FALSE), and wouldn't make sense anyway.
+  // Using 'emergency' as threshold is simply not an option; because it's falsy (expensive type checks, FALSE), and wouldn't make sense anyway.
   $severity_levels = watchdog_severity_levels();
   unset($severity_levels[0]);
 
   $form['jsonlog'] = array(
     '#type' => 'fieldset',
     '#title' => 'JSON Log',
-    '#description' => (!$server_conf ? t('Set server environment variable \'drupal_jsonlog_server_conf\' to prevent local admins from configuring JSON Log.', array(), array('context' => 'module:jsonlog')) :
-        t('The server environment variable \'drupal_jsonlog_server_conf\' is set, so JSON Log is not configurable via this form (nor by Drupal conf vars as such).', array(), array('context' => 'module:jsonlog'))
-      )
-      . '<br/>' . t('Tip: A server environment variable set in virtual host or .htaccess won\'t be visible by drush/CLI; /etc/environment might be your friend instead.', array('!break' => '<br/>'), array('context' => 'module:jsonlog')),
+    '#description' => t(
+        'Any server variable \'drupal_[jsonlog_varable_name]\' will override \'[jsonlog_varable_name]\' conf. variable,!breakexcept for !emphtags!_emph (will be combined).', array('!break' => '<br/>', '!emph' => '<em>', '!_emph' => '</em>'), array('context' => 'module:jsonlog'))
+      . '<br/>' . t('Tip: Server environment variables set in virtual host or .htaccess won\'t be visible by drush/CLI; /etc/environment might be your friend instead.', array('!break' => '<br/>'), array('context' => 'module:jsonlog')),
     '#collapsible' => TRUE,
     '#collapsed' => FALSE,
-    'jsonlog_severity_threshold' => array(
-      '#type' => 'select',
-      '#title' => t('Don\'t log events that are less severe than', array(), array('context' => 'module:jsonlog')),
-      '#description' => t('Emergency is not an option.', array(), array('context' => 'module:jsonlog')),
-      '#options' => $severity_levels,
-      '#default_value' => $server_conf && ($v = getenv('drupal_jsonlog_severity_threshold')) ? $v :
-          variable_get('jsonlog_severity_threshold', WATCHDOG_WARNING),
-      '#attributes' => array(
-        'autocomplete' => 'off',
-      ),
+  );
+
+  // Severity threshold.
+  if (($severity_threshold = getenv('drupal_jsonlog_severity_threshold'))) {
+    $overridden = TRUE;
+  }
+  else {
+    $severity_threshold = variable_get('jsonlog_severity_threshold', WATCHDOG_WARNING);
+    $overridden = FALSE;
+  }
+  $form['jsonlog']['jsonlog_severity_threshold'] = array(
+    '#type' => 'select',
+    '#title' => t(
+      '!overriddenDon\'t log events that are less severe than',
+      array('!overridden' => $overridden ? $t_overridden : ''),
+      array('context' => 'module:jsonlog')
     ),
-    'jsonlog_truncate' => array(
-      '#type' => 'textfield',
-      '#title' => t('Truncate events to'),
-      '#description' => t(
-        'Zero means no truncation.!breakLog entries longer than the file system\'s block size may result in garbled logs, due to concurrent file writes.!breakThe default block size of ext3 (common *nix file system) is !default Kb.',
-        array(
-          '!default' => JSONLOG_TRUNCATE_DEFAULT,
-          '!break' => '<br/>',
-        ),
-        array('context' => 'module:jsonlog')
-      ),
-      '#default_value' => $server_conf && ($v = getenv('drupal_jsonlog_truncate')) !== FALSE ? $v :
-          variable_get('jsonlog_truncate', JSONLOG_TRUNCATE_DEFAULT),
-      '#size' => 5,
-      '#field_suffix' => t('Kb', array(), array('context' => 'module:jsonlog')),
-      '#attributes' => array(
-        'autocomplete' => 'off',
-      ),
-    ),
-    'jsonlog_siteid' => array(
-      '#type' => 'textfield',
-      '#title' => $t_siteId,
-      '#description' => t(
-        'Spaces and quotes get replaced by hyphens.!breakDefaults to the server\'s hostname and the site\'s database name and prefix (if any):!break!default',
-        array(
-          '!default' => '&nbsp; ' . $siteid_default,
-          '!break' => '<br/>',
-        ),
-        array('context' => 'module:jsonlog')
-      ),
-      '#default_value' => $server_conf && ($v = getenv('drupal_jsonlog_siteid')) ? $v : variable_get('jsonlog_siteid', $siteid_default),
-      '#attributes' => array(
-        'autocomplete' => 'off',
-      ),
-    ),
-    'jsonlog_file' => array(
-      '#type' => 'textfield',
-      '#title' => t('Log file'),
-      '#description' => t(
-        'Defaults to PHP ini \'error_log\' path + /drupal-jsonlog/ + !site_id:!break!default!breakNB: The web server user (www-data|apache) probably isn\'t allowed to write to a file in the \'error_log\' path!break- create a sub dir (like \'drupal-jsonlog\') as root user, and do a chown or chmod on that sub dir.',
-        array(
-          '!default' => '&nbsp; ' . $file_default,
-          '!site_id' => $t_siteId,
-          '!break' => '<br/>',
-        ),
-        array('context' => 'module:jsonlog')
-      ),
-      '#default_value' => $server_conf && ($v = getenv('drupal_jsonlog_file')) ? $v : variable_get('jsonlog_file', $file_default),
-      '#size' => 100,
-      '#attributes' => array(
-        'autocomplete' => 'off',
-      ),
-    ),
-    'jsonlog_fields' => array(
-      '#type' => 'fieldset',
-      '#title' => t('JSON field names', array(), array('context' => 'module:jsonlog')),
-      '#description' => t(
-        'Watchdog\'s native field names might not make sense in a non-Drupal environment (e.g. ip).!breakAnd some log utilities require special field names (like !logstash: @timestamp).',
-        array('!break' => '<br/>', '!logstash' => l('logstash', 'http://logstash.net/', array('attributes' => array('target' => '_blank')))),
-        array('context' => 'module:jsonlog')
-      ),
-      '#collapsible' => FALSE,
-      '#collapsed' => FALSE,
-      '#tree' => TRUE,
-      'legend' => array(
-        '#type' => 'textfield',
-        '#title' => t('Property', array(), array('context' => 'module:jsonlog')),
-        '#default_value' => t('field-name', array(), array('context' => 'module:jsonlog')),
-        '#size' => 15,
-        '#field_prefix' => t('native', array(), array('context' => 'module:jsonlog')),
-        '#field_suffix' => t('recommended', array(), array('context' => 'module:jsonlog')),
-        '#attributes' => array(
-          'autocomplete' => 'off',
-          'readonly' => 'readonly',
-        ),
-      ),
+    '#description' => '[jsonlog_severity_threshold] ' . t('Emergency is not an option.', array(), array('context' => 'module:jsonlog')),
+    '#options' => $severity_levels,
+    '#default_value' => $severity_threshold,
+    '#attributes' => array(
+      'autocomplete' => 'off',
     ),
   );
-  // All readonly if server environment conf.
-  if ($server_conf) {
-    foreach ($form['jsonlog'] as $key => &$field) {
-      if ($key{0} !== '#') {
-        $field['#attributes']['disabled'] = 'disabled';
-      }
-    }
-    unset($field); // Iteration ref.
+  if ($overridden) {
+    $form['jsonlog']['jsonlog_severity_threshold']['#attributes']['disabled'] = 'disabled';
   }
+
+  // Truncation.
+  if (($truncate = getenv('drupal_jsonlog_truncate')) !== FALSE) {
+    $overridden = TRUE;
+  }
+  else {
+    $truncate = variable_get('jsonlog_truncate', JSONLOG_TRUNCATE_DEFAULT);
+    $overridden = FALSE;
+  }
+  $form['jsonlog']['jsonlog_truncate'] = array(
+    '#type' => 'textfield',
+    '#title' => t(
+      '!overriddenTruncate events to',
+      array('!overridden' => $overridden ? $t_overridden : ''),
+      array('context' => 'module:jsonlog')
+    ),
+    '#description' => '[jsonlog_truncate] ' . t(
+      'Zero means no truncation.!breakLog entries longer than the file system\'s block size may result in garbled logs, due to concurrent file writes.!breakThe default block size of ext3 (common *nix file system) is !default Kb.',
+      array(
+        '!default' => JSONLOG_TRUNCATE_DEFAULT,
+        '!break' => '<br/>',
+      ),
+      array('context' => 'module:jsonlog')
+    ),
+    '#default_value' => $truncate,
+    '#size' => 5,
+    '#field_suffix' => t('Kb', array(), array('context' => 'module:jsonlog')),
+    '#attributes' => array(
+      'autocomplete' => 'off',
+    ),
+  );
+  if ($overridden) {
+    $form['jsonlog']['jsonlog_truncate']['#attributes']['disabled'] = 'disabled';
+  }
+
+  // Site ID.
+  if (($site_id = getenv('drupal_jsonlog_siteid'))) {
+    $overridden = TRUE;
+  }
+  else {
+    $site_id = $siteid_default;
+    $overridden = FALSE;
+  }
+  $form['jsonlog']['jsonlog_siteid'] = array(
+    '#type' => 'textfield',
+    '#title' => t(
+      '!overriddenSite ID',
+      array('!overridden' => $overridden ? $t_overridden : ''),
+      array('context' => 'module:jsonlog')
+    ),
+    '#description' => '[jsonlog_siteid] ' . t(
+      'Spaces and quotes get replaced by hyphens.!breakDefaults to the server\'s hostname and the site\'s database name and prefix (if any):!break!default',
+      array(
+        '!default' => '&nbsp; ' . $siteid_default,
+        '!break' => '<br/>',
+      ),
+      array('context' => 'module:jsonlog')
+    ),
+    '#default_value' => $site_id,
+    '#attributes' => array(
+      'autocomplete' => 'off',
+    ),
+  );
+  if ($overridden) {
+    $form['jsonlog']['jsonlog_siteid']['#attributes']['disabled'] = 'disabled';
+  }
+
+  // File.
+  if (($file = getenv('drupal_jsonlog_file'))) {
+    $overridden = TRUE;
+  }
+  else {
+    $file = $file_default;
+    $overridden = FALSE;
+  }
+  $form['jsonlog']['jsonlog_file'] = array(
+    '#type' => 'textfield',
+    '#title' => t(
+      '!overriddenLog file',
+      array('!overridden' => $overridden ? $t_overridden : ''),
+      array('context' => 'module:jsonlog')
+    ),
+    '#description' => '[jsonlog_file] ' . t(
+      'Defaults to PHP ini \'error_log\' path + /drupal-jsonlog/ + !site_id:!break!default!breakNB: The web server user (www-data|apache) probably isn\'t allowed to write to a file in the \'error_log\' path!break- create a sub dir (like \'drupal-jsonlog\') as root user, and do a chown or chmod on that sub dir.',
+      array(
+        '!default' => '&nbsp; ' . $file_default,
+        '!site_id' => $t_siteId,
+        '!break' => '<br/>',
+      ),
+      array('context' => 'module:jsonlog')
+    ),
+    '#default_value' => $file,
+    '#size' => 100,
+    '#attributes' => array(
+      'autocomplete' => 'off',
+    ),
+  );
+  if ($overridden) {
+    $form['jsonlog']['jsonlog_file']['#attributes']['disabled'] = 'disabled';
+  }
+
+  // Tags.
+  $form['jsonlog']['jsonlog_tags'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Tags', array(), array('context' => 'module:jsonlog')),
+    '#description' => '[jsonlog_tags] ' . t(
+      'Comma-separated list of tags.!breakTags set by server environment variable will be combined with tags set here.',
+      array('!break' => '<br/>',),
+      array('context' => 'module:jsonlog')
+    ),
+    '#default_value' => variable_get('jsonlog_tags', ''),
+    '#size' => 100,
+    '#field_prefix' => ($tags = getenv('drupal_jsonlog_tags')) !== FALSE ? ($tags . ', ') : '',
+    '#attributes' => array(
+      'autocomplete' => 'off',
+    ),
+  );
+
 
   // Make ISO 8601 timestamp for timestamp label.
   $millis = round(microtime(TRUE) * 1000);
@@ -183,103 +225,107 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
       'custom' => TRUE,
       'name' => 'event_id',
       'label' => t(
-        'Event ID !span(!site_id + unique ID)!_span',
-        array('!site_id' => $t_siteId, '!span' => '<span>', '!_span' => '</span>'),
+        'Event ID (!site_id + unique ID)',
+        array('!site_id' => $t_siteId),
         array('context' => 'module:jsonlog')
       ),
-      'value' => 1,
+      'value' => uniqid($site_id, TRUE),
     ),
     'site_id' => array(
       'custom' => TRUE,
       'name' => 'site_id',
       'label' => $t_siteId,
+      'value' => $site_id,
     ),
     'type' => array(
       'label' => t('Type', array(), array('context' => 'module:jsonlog')),
+      'value' => 'some_module_name',
     ),
     'severity' => array(
       'label' => t('Severity', array(), array('context' => 'module:jsonlog')),
+      'value' => $severity_threshold,
     ),
     'method' => array(
       'custom' => TRUE,
       'name' => 'method',
-      'label' => t('Request method !span(GET, POST, cli)!_span', array('!span' => '<span>', '!_span' => '</span>'), array('context' => 'module:jsonlog')),
+      'label' => t('Request method (GET, POST, cli)', array(), array('context' => 'module:jsonlog')),
+      'value' => $_SERVER['REQUEST_METHOD'],
     ),
     'request_uri' => array(
       'label' => t('Request URI', array(), array('context' => 'module:jsonlog')),
+      'value' => $GLOBALS['base_root'] . request_uri(),
     ),
     'referer' => array(
       'label' => t('Referer', array(), array('context' => 'module:jsonlog')),
+      'value' => isset($_SERVER['HTTP_REFERER']) ? check_plain($_SERVER['HTTP_REFERER']) : '',
     ),
     'uid' => array(
       'label' => t('User ID', array(), array('context' => 'module:jsonlog')),
+      'value' => $uid = $GLOBALS['user']->uid,
     ),
     'username' => array(
       'custom' => TRUE,
       'name' => 'username',
-      'label' => t('Username !span(when not anonymous user)!_span', array('!span' => '<span>', '!_span' => '</span>'), array('context' => 'module:jsonlog')),
+      'label' => t('Username (when not anonymous user)', array(), array('context' => 'module:jsonlog')),
+      'value' => $uid && !empty($GLOBALS['user']->name) ? $GLOBALS['user']->name : '',
     ),
     'ip' => array(
       'name' => 'client_ip',
       'label' => t('User\'s I.P. address', array(), array('context' => 'module:jsonlog')),
+      'value' => ip_address(),
     ),
     'link' => array(
       'label' => t('Link', array(), array('context' => 'module:jsonlog')),
+      'value' => '',
     ),
     'variables' => array(
       'label' => t('Variables', array(), array('context' => 'module:jsonlog')),
+      'value' => '',
     ),
     'truncation' => array(
       'custom' => TRUE,
       'name' => 'trunc',
-      'label' => t('Truncation !span(original/truncated length of message)!_span', array('!span' => '<span>', '!_span' => '</span>'), array('context' => 'module:jsonlog')),
+      'label' => t('Truncation (null, or array of original/truncated length of message)', array(), array('context' => 'module:jsonlog')),
+      'value' => NULL,
     ),
   );
 
-  // Table view of registered service endpoint methods.
+  // Table view of a log entry.
   $table_header = array(
     t('Property', array(), array('context' => 'module:jsonlog')),
-    t('Field name', array(), array('context' => 'module:restmini_service')),
-    t('Example', array(), array('context' => 'module:restmini_service')),
+    t('JSON field name', array(), array('context' => 'module:jsonlog')),
+    t('Example', array(), array('context' => 'module:jsonlog')),
   );
   $table_rows = array();
 
   foreach ($json_fields as $name => $props) {
-
-    $row = array(
-      'data' => array(
-        $props['label'],
-        !empty($props['name']) ? $props['name'] : $name,
-      ),
-    );
-
-    $table_rows[] = $row;
-
     $table_rows[] = array(
       'data' => array(
         $props['label'],
         !empty($props['name']) ? $props['name'] : $name,
-        $endpoint_name,
+        $props['value']
       ),
     );
-
-
-    $form['jsonlog']['jsonlog_fields'][$name] = array(
-      '#type' => 'textfield',
-      '#title' => $props['label'],
-      '#default_value' => !empty($props['name']) ? $props['name'] : $name,
-      '#field_prefix' => empty($props['custom']) ? $name : '&nbsp;',
-      '#field_suffix' => !empty($props['name']) ? $props['name'] : '&nbsp;',
-      '#required' => !$server_conf,
-      '#size' => 15,
-      '#attributes' => array(
-        'autocomplete' => 'off',
-      ),
-    );
-    if ($server_conf) {
-      $form['jsonlog']['jsonlog_fields'][$name]['#attributes']['disabled'] = 'disabled';
-    }
   }
+
+  $form['jsonlog']['example'] = array(
+    '#type' => 'markup',
+    '#markup' => '<label>'
+      . t('JSONlog entry example', array(), array('context' => 'module:jsonlog')) . '</label>'
+      . theme_table(array(
+          'header' => $table_header,
+          'rows' => $table_rows,
+          'attributes' => array(
+            'class' => array(
+              'restmini-service-list'
+            ),
+          ),
+          'caption' => '',
+          'colgroups' => array(),
+          'sticky' => TRUE,
+        )
+      ),
+  );
 
   // Prepend our submit handler; we need to get in first, otherwise our changes to form values amounts to nothing.
   array_unshift($form['#submit'], 'jsonlog_form_system_logging_settings_submit');
@@ -292,6 +338,8 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
 function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
   $values =& $form_state['values'];
 
+  $file = '';
+
   $fields = array(
     'jsonlog_severity_threshold',
     'jsonlog_truncate',
@@ -299,25 +347,35 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
     'jsonlog_file',
   );
 
-  // If server environment vars rule: don't save any var.
-  if (getenv('drupal_jsonlog_server_conf')) {
-    foreach ($fields as $name) {
+  // Don't save a var if there's a equivalent server environment var set.
+  foreach ($fields as $name) {
+    if (getenv('drupal_' . $name) !== FALSE) {
       unset($form_state['input'][$name], $values[$name]);
     }
-
-    $file = _jsonlog_default_file();
-  }
-  // Otherwise: trim all values.
-  else {
-    foreach ($fields as $name) {
+    else {
+      // Otherwise: trim all values.
       $values[$name] = trim($values[$name]);
-    }
 
-    if (!$values['jsonlog_truncate'] || $values['jsonlog_truncate'] < 0) {
-      $values['jsonlog_truncate'] = 0;
+      switch ($name) {
+        case 'jsonlog_truncate':
+          if (!$values['jsonlog_truncate'] || $values['jsonlog_truncate'] < 0) {
+            $values['jsonlog_truncate'] = 0;
+          }
+          break;
+        case 'jsonlog_file':
+          if ($values['jsonlog_file']) {
+            $file = $values['jsonlog_file'];
+          }
+          break;
+      }
     }
+  }
 
-    $file = $values['jsonlog_file'];
+  // @todo: do tags.
+
+
+  if (!$file) {
+    $file = _jsonlog_default_file();
   }
 
   // Test.
@@ -330,7 +388,7 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
  * @return string
  */
 function _jsonlog_default_site_id() {
-  if (getenv('drupal_jsonlog_server_conf') && ($site_id = getenv('drupal_jsonlog_siteid'))) {
+  if (($site_id = getenv('drupal_jsonlog_siteid'))) {
     return $site_id;
   }
 
@@ -351,7 +409,7 @@ function _jsonlog_default_site_id() {
  *   Empty upon failure.
  */
 function _jsonlog_default_file() {
-  if (getenv('drupal_jsonlog_server_conf') && ($file = getenv('drupal_jsonlog_file'))) {
+  if (($file = getenv('drupal_jsonlog_file'))) {
     return $file;
   }
 
@@ -451,15 +509,15 @@ function _jsonlog_test_filing($file = '') {
       'jsonlog',
       'Testing watchdog logging - please check if this entry was written to file \'!file\'.',
       array('!file' => $file),
-      variable_get('jsonlog_severity_threshold', WATCHDOG_WARNING)
+      ($threshold = getenv('drupal_jsonlog_severity_threshold')) ? $threshold : variable_get('jsonlog_severity_threshold', WATCHDOG_WARNING)
     );
   }
   catch (Exception $xc) {
     // Ignore; some watchdog implementation failed, and (probably) threw a (database) PDOException.
   }
   // Restore original value.
-  // Except if server env. vars rules, then we must (oddly) keep the new value.
-  if (!getenv('drupal_jsonlog_server_conf')) {
+  // Except if server env. var rules, then we must (oddly) keep the new value.
+  if (!getenv('drupal_jsonlog_file')) {
     variable_set('jsonlog_file', $original_file);
   }
 
@@ -481,22 +539,16 @@ function _jsonlog_test_filing($file = '') {
  * @param array $log_entry
  */
 function jsonlog_watchdog(array $log_entry) {
-  static $_server_conf, $_threshold, $_truncate, $_site_id, $_file, $_severity;
+  static $_threshold, $_site_id, $_truncate, $_file, $_severity;
+
+
+  // @todo: Implement tags.
 
   // Don't load more settings than threshold, in case current entry isn't sufficiently severe.
   if ($_threshold === NULL) {
-    // Server environment variables rule?
-    // Except siteid and file will always be overridable by Drupal conf var, because the default is conditioned by context.
-    $_server_conf = getenv('drupal_jsonlog_server_conf');
-
-    if ($_server_conf) {
-      // A threshold of zero (emergency) wouldnt make sense in the real world, so no reason check by type (false).
-      if (!($_threshold = getenv('drupal_jsonlog_severity_threshold'))) {
-        $_threshold = WATCHDOG_WARNING;
-      }
-      else {
-        $_threshold = variable_get('jsonlog_severity_threshold', WATCHDOG_WARNING);
-      }
+    // A threshold of zero (emergency) wouldnt make sense in the real world, so no reason check by type (false).
+    if (!($_threshold = getenv('drupal_jsonlog_severity_threshold'))) {
+      $_threshold = variable_get('jsonlog_severity_threshold', WATCHDOG_WARNING);
     }
   }
   // Severity is upside down; less is more.
@@ -507,9 +559,9 @@ function jsonlog_watchdog(array $log_entry) {
   // Load the rest of the settings.
   if (!$_site_id) {
     // If site ID setting doesnt exist: get default.
-    // And save it - even if server vars rule.
+    // And save it, because it's costly to produce.
     if (!($_site_id = variable_get('jsonlog_siteid'))) {
-      if ($_server_conf && ($_site_id = getenv('drupal_jsonlog_siteid'))) {
+      if (($_site_id = getenv('drupal_jsonlog_siteid'))) {
         variable_set('jsonlog_siteid', $_site_id);
       }
       else {
@@ -518,12 +570,7 @@ function jsonlog_watchdog(array $log_entry) {
     }
 
     // Truncate.
-    if ($_server_conf) {
-      if (($_truncate = getenv('drupal_jsonlog_truncate')) === FALSE) {
-        $_truncate = JSONLOG_TRUNCATE_DEFAULT;
-      }
-    }
-    else {
+    if (($_truncate = getenv('drupal_jsonlog_truncate')) === FALSE) {
       $_truncate = variable_get('jsonlog_truncate', JSONLOG_TRUNCATE_DEFAULT);
     }
     if ($_truncate) {
@@ -535,9 +582,10 @@ function jsonlog_watchdog(array $log_entry) {
       $_truncate *= 7 / 8;
     }
 
-    // If file setting doesnt exist: get default (and save it - even if server vars rule).
+    // If file setting doesnt exist: get default.
+    // And save it, because it's costly to produce.
     if (!($_file = variable_get('jsonlog_file'))) {
-      if (($_server_conf && ($_file = getenv('drupal_jsonlog_file'))) || ($_file = _jsonlog_default_file())) {
+      if (($_file = getenv('drupal_jsonlog_file')) || ($_file = _jsonlog_default_file())) {
         variable_set('jsonlog_file', $_file);
       }
       else {

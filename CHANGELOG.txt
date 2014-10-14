@@ -1,3 +1,10 @@
+jsonlog 7.x-1.x, 2014-10-14
+---------------------------
+* JSON field names are no longer configurable.
+* The version field's value is no longer configurable, but always 1.
+* All conf variables are now overridable by server environment variables (drupal_[variable name]), and no longer conditioned by server env var drupal_jsonlog_server_conf (now obsolete).
+
+
 jsonlog 7.x-1.x, 2014-08-08
 ---------------------------
 * Use server environment vars instead of Drupal conf vars, if server env.var 'drupal_jsonlog_server_conf' is set.
