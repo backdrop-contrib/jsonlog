@@ -9,3 +9,14 @@ div.form-item.form-type-textfield.form-item-jsonlog-truncate > input {
 div.fieldset-description {
   padding-bottom: 1em;
 }
+table.jsonlog-entry-example {
+  margin-top: 0.5em;
+  margin-bottom: 1.5em;
+}
+div.form-item.form-item-jsonlog-test-filing {
+  margin-top: 1.5em;
+  margin-bottom: 1.5em;
+}
+div.form-item.form-item-jsonlog-test-filing label {
+  font-weight: bold;
+}

@@ -4,9 +4,6 @@
  * JSON Log module.
  */
 
-// @todo: Implement tags, as comma-separated -> array.
-// @todo: Implement http host field (empty in CLI/drush mode, but anyway).
-// @todo: consider implementing site_name field (very Drupal, but probably rather useless).
 
 /**
  * Default max. length of a log entry, in kilobytes.
@@ -180,6 +177,7 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
   }
 
   // Tags.
+  $tags_server = ($tags = getenv('drupal_jsonlog_tags')) !== FALSE ? $tags : '';
   $form['jsonlog']['jsonlog_tags'] = array(
     '#type' => 'textfield',
     '#title' => t('Tags', array(), array('context' => 'module:jsonlog')),
@@ -188,21 +186,39 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
       array('!break' => '<br/>',),
       array('context' => 'module:jsonlog')
     ),
-    '#default_value' => variable_get('jsonlog_tags', ''),
+    '#default_value' => $tags_site = variable_get('jsonlog_tags', ''),
     '#size' => 100,
-    '#field_prefix' => ($tags = getenv('drupal_jsonlog_tags')) !== FALSE ? ($tags . ', ') : '',
+    '#field_prefix' => $tags_server !== '' ? ($tags_server . ', ') : '',
     '#attributes' => array(
       'autocomplete' => 'off',
     ),
   );
 
 
-  // Make ISO 8601 timestamp for timestamp label.
+  // Make table view of a log entry.
+
+  // ISO 8601 timestamp.
   $millis = round(microtime(TRUE) * 1000);
   $seconds = (int) floor($millis / 1000);
   $millis -= $seconds * 1000;
   $millis = str_pad($millis, 3, '0', STR_PAD_LEFT);
   $timestamp = substr(gmdate('c', $seconds), 0, 19) . '.' . $millis . 'Z';
+
+  if ($tags_server) {
+    $tags = $tags_server;
+    if ($tags_site) {
+      $tags .= ',' . $tags_site;
+    }
+  }
+  else {
+    $tags = $tags_site;
+  }
+  if ($tags) {
+    $tags = '[\'' . join('\',\'', explode(',', $tags)) . '\']';
+  }
+  else {
+    $tags = 'null';
+  }
 
   // JSON fields.
   $json_fields = array(
@@ -236,6 +252,12 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
       'name' => 'site_id',
       'label' => $t_siteId,
       'value' => $site_id,
+    ),
+    'tags' => array(
+      'custom' => TRUE,
+      'name' => 'tags',
+      'label' => t('Tags (null or array of strings)', array(), array('context' => 'module:jsonlog')),
+      'value' => $tags,
     ),
     'type' => array(
       'label' => t('Type', array(), array('context' => 'module:jsonlog')),
@@ -279,18 +301,17 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
       'value' => '',
     ),
     'variables' => array(
-      'label' => t('Variables', array(), array('context' => 'module:jsonlog')),
+      'label' => t('Variables (null or object hash map)', array(), array('context' => 'module:jsonlog')),
       'value' => '',
     ),
     'truncation' => array(
       'custom' => TRUE,
       'name' => 'trunc',
-      'label' => t('Truncation (null, or array of original/truncated length of message)', array(), array('context' => 'module:jsonlog')),
+      'label' => t('Truncation (null, or array [original message length, truncated message length])', array(), array('context' => 'module:jsonlog')),
       'value' => NULL,
     ),
   );
 
-  // Table view of a log entry.
   $table_header = array(
     t('Property', array(), array('context' => 'module:jsonlog')),
     t('JSON field name', array(), array('context' => 'module:jsonlog')),
@@ -317,15 +338,28 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
           'rows' => $table_rows,
           'attributes' => array(
             'class' => array(
-              'restmini-service-list'
+              'jsonlog-entry-example'
             ),
           ),
           'caption' => '',
           'colgroups' => array(),
           'sticky' => TRUE,
+          'empty' => '',
         )
       ),
   );
+
+
+  // Test logging.
+  $form['jsonlog']['jsonlog_test_filing'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Test filing a log entry', array(), array('context' => 'module:jsonlog')),
+    '#default_value' => 0,
+    '#attributes' => array(
+      'autocomplete' => 'off',
+    ),
+  );
+
 
   // Prepend our submit handler; we need to get in first, otherwise our changes to form values amounts to nothing.
   array_unshift($form['#submit'], 'jsonlog_form_system_logging_settings_submit');
@@ -371,15 +405,31 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
     }
   }
 
-  // @todo: do tags.
-
-
-  if (!$file) {
-    $file = _jsonlog_default_file();
+  // Tags.
+  if (($values['jsonlog_tags'] = $v = trim($values['jsonlog_tags'])) !== '') {
+    $v = str_replace(array("\r", "\n"), '', $v);
+    if ($v !== '') {
+      if ($v{0} === ',') {
+        $v = substr($v, 1);
+      }
+      if ($v !== '') {
+        if ($v{strlen($v) - 1} === ',') {
+          $v = substr($v, 0, strlen($v) - 1);
+        }
+      }
+      if (strpos($v, ',')) {
+        $v = preg_replace('/ *, */', ',', $v);
+      }
+    }
+    $values['jsonlog_tags'] = trim($v);
   }
 
   // Test.
-  _jsonlog_test_filing($file);
+  if ($values['jsonlog_test_filing']) {
+    _jsonlog_test_filing($file ? $file : _jsonlog_default_file());
+  }
+  // Don't ever save that field.
+  unset($form_state['input']['jsonlog_test_filing'], $values['jsonlog_test_filing']);
 }
 
 /**
@@ -516,10 +566,7 @@ function _jsonlog_test_filing($file = '') {
     // Ignore; some watchdog implementation failed, and (probably) threw a (database) PDOException.
   }
   // Restore original value.
-  // Except if server env. var rules, then we must (oddly) keep the new value.
-  if (!getenv('drupal_jsonlog_file')) {
-    variable_set('jsonlog_file', $original_file);
-  }
+  variable_set('jsonlog_file', $original_file);
 
   drupal_set_message(
     t(
@@ -539,10 +586,7 @@ function _jsonlog_test_filing($file = '') {
  * @param array $log_entry
  */
 function jsonlog_watchdog(array $log_entry) {
-  static $_threshold, $_site_id, $_truncate, $_file, $_severity;
-
-
-  // @todo: Implement tags.
+  static $_threshold, $_site_id, $_file, $_truncate, $_severity, $_tags;
 
   // Don't load more settings than threshold, in case current entry isn't sufficiently severe.
   if ($_threshold === NULL) {
@@ -558,18 +602,26 @@ function jsonlog_watchdog(array $log_entry) {
 
   // Load the rest of the settings.
   if (!$_site_id) {
-    // If site ID setting doesnt exist: get default.
-    // And save it, because it's costly to produce.
-    if (!($_site_id = variable_get('jsonlog_siteid'))) {
-      if (($_site_id = getenv('drupal_jsonlog_siteid'))) {
-        variable_set('jsonlog_siteid', $_site_id);
-      }
-      else {
+    // Site ID: Try server environment var before Drupal conf. var.
+    if (!($_site_id = getenv('drupal_jsonlog_siteid'))) {
+      if (!($_site_id = variable_get('jsonlog_siteid'))) {
         variable_set('jsonlog_siteid', $_site_id = _jsonlog_default_site_id());
       }
     }
 
-    // Truncate.
+    // File: Try server environment var before Drupal conf. var.
+    if (!($_file = getenv('drupal_jsonlog_file'))) {
+      if (!($_file = variable_get('jsonlog_file'))) {
+        if (($_file = _jsonlog_default_file())) {
+          variable_set('jsonlog_file', $_file);
+        }
+        else {
+          error_log('Drupal jsonlog, site ID[' . $_site_id . '], failed to establish server\'s default log dir.');
+        }
+      }
+    }
+
+    // Truncation: Try server environment var before Drupal conf. var.
     if (($_truncate = getenv('drupal_jsonlog_truncate')) === FALSE) {
       $_truncate = variable_get('jsonlog_truncate', JSONLOG_TRUNCATE_DEFAULT);
     }
@@ -577,20 +629,9 @@ function jsonlog_watchdog(array $log_entry) {
       // Kb to bytes.
       $_truncate *= 1024;
       // Substract estimated max length of everything but message content.
-      $_truncate -= 640;
+      $_truncate -= 768;
       // Message will get longer when JSON encoded, because of hex encoding of <>&" chars.
       $_truncate *= 7 / 8;
-    }
-
-    // If file setting doesnt exist: get default.
-    // And save it, because it's costly to produce.
-    if (!($_file = variable_get('jsonlog_file'))) {
-      if (($_file = getenv('drupal_jsonlog_file')) || ($_file = _jsonlog_default_file())) {
-        variable_set('jsonlog_file', $_file);
-      }
-      else {
-        error_log('Drupal jsonlog, site ID[' . $_site_id . '], failed to establish server\'s default log dir.');
-      }
     }
 
     $_severity = array(
@@ -603,6 +644,22 @@ function jsonlog_watchdog(array $log_entry) {
       'info',
       'debug',
     );
+
+    // Tags: append Drupal conf. var to server env. var.
+    $tags_server = ($tags = getenv('drupal_jsonlog_tags')) !== FALSE ? $tags : '';
+    $tags_site = variable_get('jsonlog_tags', '');
+    if ($tags_server) {
+      $tags = $tags_server;
+      if ($tags_site) {
+        $tags .= ',' . $tags_site;
+      }
+    }
+    else {
+      $tags = $tags_site;
+    }
+    if ($tags) {
+      $_tags = explode(',', $tags);
+    }
   }
 
 
@@ -650,6 +707,8 @@ function jsonlog_watchdog(array $log_entry) {
   $entry->{'@version'} = 1;
   $entry->event_id = uniqid($_site_id, TRUE);
   $entry->site_id = $_site_id;
+  $entry->tags = $_tags;
+
   $entry->type = $log_entry['type'];
 
   $entry->severity = $_severity[$log_entry['severity']];
@@ -663,7 +722,7 @@ function jsonlog_watchdog(array $log_entry) {
 
   $entry->client_ip = $log_entry['ip'];
   $entry->link = !$log_entry['link'] ? NULL : strip_tags($log_entry['link']);
-  $entry->variables = $variables;
+  $entry->variables = $variables ? $variables : NULL;
   $entry->trunc = $truncation;
 
 
