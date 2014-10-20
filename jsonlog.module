@@ -1,7 +1,7 @@
 <?php
 /**
  * @file
- * JSON Log module.
+ * JSONlog module.
  */
 
 
@@ -34,7 +34,7 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
 
   // These translations are used a lot.
   $t_siteId = t('Site ID', array(), array('context' => 'module:jsonlog'));
-  $t_overridden = t('¡overridden! ', array(), array('context' => 'module:jsonlog'));
+  $t_overridden = t(' !sml¡overridden!!_sml', array('!sml' => '<small>', '!_sml' => '</small>'), array('context' => 'module:jsonlog'));
 
   // Using 'emergency' as threshold is simply not an option; because it's falsy (expensive type checks, FALSE), and wouldn't make sense anyway.
   $severity_levels = watchdog_severity_levels();
@@ -61,11 +61,11 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
   $form['jsonlog']['jsonlog_severity_threshold'] = array(
     '#type' => 'select',
     '#title' => t(
-      '!overriddenDon\'t log events that are less severe than',
-      array('!overridden' => $overridden ? $t_overridden : ''),
+      'Don\'t log events that are less severe than !sml[jsonlog_severity_threshold]!_sml!overridden',
+      array('!overridden' => $overridden ? $t_overridden : '', '!sml' => '<small>', '!_sml' => '</small>'),
       array('context' => 'module:jsonlog')
     ),
-    '#description' => '[jsonlog_severity_threshold] ' . t('Emergency is not an option.', array(), array('context' => 'module:jsonlog')),
+    '#description' => t('Emergency is not an option.', array(), array('context' => 'module:jsonlog')),
     '#options' => $severity_levels,
     '#default_value' => $severity_threshold,
     '#attributes' => array(
@@ -87,11 +87,11 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
   $form['jsonlog']['jsonlog_truncate'] = array(
     '#type' => 'textfield',
     '#title' => t(
-      '!overriddenTruncate events to',
-      array('!overridden' => $overridden ? $t_overridden : ''),
+      'Truncate events to !sml[jsonlog_truncate]!_sml!overridden',
+      array('!overridden' => $overridden ? $t_overridden : '', '!sml' => '<small>', '!_sml' => '</small>'),
       array('context' => 'module:jsonlog')
     ),
-    '#description' => '[jsonlog_truncate] ' . t(
+    '#description' => t(
       'Zero means no truncation.!breakLog entries longer than the file system\'s block size may result in garbled logs, due to concurrent file writes.!breakThe default block size of ext3 (common *nix file system) is !default Kb.',
       array(
         '!default' => JSONLOG_TRUNCATE_DEFAULT,
@@ -121,11 +121,11 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
   $form['jsonlog']['jsonlog_siteid'] = array(
     '#type' => 'textfield',
     '#title' => t(
-      '!overriddenSite ID',
-      array('!overridden' => $overridden ? $t_overridden : ''),
+      'Site ID !sml[jsonlog_siteid]!_sml!overridden',
+      array('!overridden' => $overridden ? $t_overridden : '', '!sml' => '<small>', '!_sml' => '</small>'),
       array('context' => 'module:jsonlog')
     ),
-    '#description' => '[jsonlog_siteid] ' . t(
+    '#description' => t(
       'Spaces and quotes get replaced by hyphens.!breakDefaults to the server\'s hostname and the site\'s database name and prefix (if any):!break!default',
       array(
         '!default' => '&nbsp; ' . $siteid_default,
@@ -153,11 +153,11 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
   $form['jsonlog']['jsonlog_file'] = array(
     '#type' => 'textfield',
     '#title' => t(
-      '!overriddenLog file',
-      array('!overridden' => $overridden ? $t_overridden : ''),
+      'Log file !sml[jsonlog_file]!_sml!overridden',
+      array('!overridden' => $overridden ? $t_overridden : '', '!sml' => '<small>', '!_sml' => '</small>'),
       array('context' => 'module:jsonlog')
     ),
-    '#description' => '[jsonlog_file] ' . t(
+    '#description' => t(
       'Defaults to PHP ini \'error_log\' path + /drupal-jsonlog/ + !site_id:!break!default!breakNB: The web server user (www-data|apache) probably isn\'t allowed to write to a file in the \'error_log\' path!break- create a sub dir (like \'drupal-jsonlog\') as root user, and do a chown or chmod on that sub dir.',
       array(
         '!default' => '&nbsp; ' . $file_default,
@@ -176,12 +176,24 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
     $form['jsonlog']['jsonlog_file']['#attributes']['disabled'] = 'disabled';
   }
 
+  // Test logging.
+  $form['jsonlog']['jsonlog_test_filing'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Test filing a JSONlog entry', array(), array('context' => 'module:jsonlog')),
+    '#description' => t('You\'ll be warned and guided along if it doesn\'t work correctly.', array(), array('context' => 'module:jsonlog')),
+    '#default_value' => 0,
+    '#title_display' => 'before',
+    '#attributes' => array(
+      'autocomplete' => 'off',
+    ),
+  );
+
   // Tags.
   $tags_server = ($tags = getenv('drupal_jsonlog_tags')) !== FALSE ? $tags : '';
   $form['jsonlog']['jsonlog_tags'] = array(
     '#type' => 'textfield',
-    '#title' => t('Tags', array(), array('context' => 'module:jsonlog')),
-    '#description' => '[jsonlog_tags] ' . t(
+    '#title' => t('Tags !sml[jsonlog_tags]!_sml', array('!sml' => '<small>', '!_sml' => '</small>'), array('context' => 'module:jsonlog')),
+    '#description' => t(
       'Comma-separated list of tags.!breakTags set by server environment variable will be combined with tags set here.',
       array('!break' => '<br/>',),
       array('context' => 'module:jsonlog')
@@ -350,17 +362,6 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
   );
 
 
-  // Test logging.
-  $form['jsonlog']['jsonlog_test_filing'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Test filing a log entry', array(), array('context' => 'module:jsonlog')),
-    '#default_value' => 0,
-    '#attributes' => array(
-      'autocomplete' => 'off',
-    ),
-  );
-
-
   // Prepend our submit handler; we need to get in first, otherwise our changes to form values amounts to nothing.
   array_unshift($form['#submit'], 'jsonlog_form_system_logging_settings_submit');
 }
@@ -517,8 +518,8 @@ function _jsonlog_test_filing($file = '') {
   if (!file_exists($dir)) {
     drupal_set_message(
       t(
-        'jsonlog: Log directory \'!dir\' doesn\'t exist.',
-        array('!dir' => $dir),
+        'jsonlog: The log directory doesn\'t exist.!breakPlease create the directory \'!dir\'!breakor change the \'Log file\' setting.',
+        array('!dir' => $dir, '!break' => '<br/>'),
         array('context' => 'module:jsonlog')
       ),
       'error'
@@ -529,8 +530,8 @@ function _jsonlog_test_filing($file = '') {
     if (!touch($file)) {
       drupal_set_message(
         t(
-          'jsonlog: Failed to create log file \'!file\'.',
-          array('!file' => $file),
+          'jsonlog: The log file doesn\'t exist.!breakPlease create the file \'!file\'!breakor change the \'Log file\' setting.',
+          array('!file' => $file, '!break' => '<br/>'),
           array('context' => 'module:jsonlog')
         ),
         'error'
@@ -538,11 +539,11 @@ function _jsonlog_test_filing($file = '') {
       return FALSE;
     }
   }
-  elseif (!is_writable($file)) {
+  elseif (is_writable($file)) {
     drupal_set_message(
       t(
-        'jsonlog: Cannot write to log file \'!file\'.',
-        array('!file' => $file),
+        'jsonlog: The log file is not writable for the webserver user.!breakPlease check permissions of the file \'!file\'!breakand make sure that it\'s parent directory is executable for the webserver user.',
+        array('!file' => $file, '!break' => '<br/>'),
         array('context' => 'module:jsonlog')
       ),
       'error'

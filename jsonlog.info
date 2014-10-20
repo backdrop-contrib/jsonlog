@@ -5,6 +5,4 @@ package = Administration
 core = 7.x
 php = 5.3
 
-version = 7.x-1.0-beta05
-
 configure = admin/config/development/logging

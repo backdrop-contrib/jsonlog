@@ -1,3 +1,7 @@
+jsonlog 7.x-1.x, 2014-10-20
+---------------------------
+* Better error handling when testing log filing, and some admin page improvements.
+
 jsonlog 7.x-1.x, 2014-10-15
 ---------------------------
 * Implemented tags.
