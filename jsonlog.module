@@ -13,7 +13,7 @@
 define('JSONLOG_TRUNCATE_DEFAULT', 4);
 
 /**
- * Adds this module's setting fields to the standard logging settings form.
+ * Adds this module's setting fields to the system logging settings form.
  *
  * Implements hook_form_FORM_ID_alter().
  *
@@ -21,14 +21,16 @@ define('JSONLOG_TRUNCATE_DEFAULT', 4);
  * @param array &$form_state
  */
 function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
+  module_load_include('inc', 'jsonlog');
+
   drupal_add_css(
-    drupal_get_path('module', 'jsonlog') . '/jsonlog.css',
+    drupal_get_path('module', 'jsonlog') . '/jsonlog.admin.css',
     array('type' => 'file', 'group' => CSS_DEFAULT, 'preprocess' => FALSE, 'every_page' => FALSE)
   );
 
   // Defaults.
-  $siteid_default = _jsonlog_default_site_id();
-  if (!($file_default = _jsonlog_default_file())) {
+  $siteid_default = jsonlog_default_site_id();
+  if (!($file_default = jsonlog_default_file())) {
     drupal_set_message(t('Failed to establish the server\'s default logging directory.', array(), array('context' => 'module:jsonlog')), 'error');
   }
 
@@ -361,12 +363,13 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
       ),
   );
 
-
   // Prepend our submit handler; we need to get in first, otherwise our changes to form values amounts to nothing.
   array_unshift($form['#submit'], 'jsonlog_form_system_logging_settings_submit');
 }
 
 /**
+ * Custom submit handler for the system logging settings form.
+ *
  * @param array $form
  * @param array $form_state
  */
@@ -427,161 +430,39 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
 
   // Test.
   if ($values['jsonlog_test_filing']) {
-    _jsonlog_test_filing($file ? $file : _jsonlog_default_file());
+    module_load_include('inc', 'jsonlog');
+    jsonlog_test_filing($file ? $file : jsonlog_default_file());
   }
   // Don't ever save that field.
   unset($form_state['input']['jsonlog_test_filing'], $values['jsonlog_test_filing']);
 }
 
 /**
- * Establish default site ID.
+ * Logs any watchdog call - at or above a certain severity threshold - as JSON to a custom log file.
  *
- * @return string
- */
-function _jsonlog_default_site_id() {
-  if (($site_id = getenv('drupal_jsonlog_siteid'))) {
-    return $site_id;
-  }
-
-  // Server's hostname + database name + database prefix (if any).
-  $db =& $GLOBALS['databases']['default']['default'];
-  $site_id = drupal_strtolower(preg_replace('/[^\w\d\.\-_]/', '-', gethostname()))
-    . '__' . $db['database']
-    . (!$db['prefix'] ? '' : ('__' . $db['prefix']));
-  unset($db); // Clear ref.
-
-  return $site_id;
-}
-
-/**
- * Establish default logging file path.
+ * Default severity threshold: warning.
  *
- * @return string
- *   Empty upon failure.
- */
-function _jsonlog_default_file() {
-  if (($file = getenv('drupal_jsonlog_file'))) {
-    return $file;
-  }
-
-  // Default web server log dir for common *nix distributions.
-  $default_log_dirs = array(
-    'debian' => '/var/log/apache2',
-    'redhat' => '/var/log/httpd',
-  );
-
-  $dir = '';
-  if (!($server_log = ini_get('error_log')) || $server_log === 'syslog') {
-    // Try default web server log dirs for common *nix distributions.
-    foreach ($default_log_dirs as $val) {
-      if (file_exists($val)) {
-        $dir = $val;
-        break;
-      }
-    }
-  }
-  else {
-    $dir = str_replace('\\', '/', dirname($server_log));
-  }
-
-  if ($dir) {
-    return $dir . '/drupal-jsonlog/' . variable_get('jsonlog_siteid', _jsonlog_default_site_id()) . '.log.json';
-  }
-  return '';
-}
-
-/**
- * Sets drupal message.
+ * Prefers server environment variables for Drupal conf variables.
+ * Any jsonlog conf variable may be overridden by a 'drupal_[jsonlog variable]' server environment var.
  *
- * @see _jsonlog_default_file()
+ *  JSON fields (watchdog standard fields are not explained here):
+ *  - \@timestamp: ISO-8601 milliseconds timestamp instead of watchdog's native seconds timestamp
+ *  - \@version: (always) 1
+ *  - event_id: jsonlog site ID to unique padding
+ *  - site_id: (default) server's hostname + database name + database prefix (if any)
+ *  - tags: comma-separated list; becomes array
+ *  - type
+ *  - severity
+ *  - method: HTTP request method, or 'cli' (if drush)
+ *  - request_uri
+ *  - referer
+ *  - uid
+ *  - username: name of current user, or empty
+ *  - client_ip: equivalent to watchdog standard 'ip' field
+ *  - link
+ *  - variables: watchdog standard, except null if empty
+ *  - trunc: null if the log entry as a whole doesn't exceed the json_truncate setting; otherwise array of original length, truncated length
  *
- * @param string $file
- *   Default: empty (~ use default file location algo)
- *
- * @return boolean
- */
-function _jsonlog_test_filing($file = '') {
-  if (!$file) {
-    if (!($file = variable_get('jsonlog_file'))) {
-      if (!($_file = _jsonlog_default_file())) {
-        drupal_set_message(t('jsonlog: Failed to establish the server\'s default logging directory.', array(), array('context' => 'module:jsonlog')), 'error');
-        return FALSE;
-      }
-    }
-  }
-
-  $dir = dirname($file);
-  if ($dir === '') {
-    drupal_set_message(t('jsonlog: Log directory path name is empty.', array(), array('context' => 'module:jsonlog')), 'error');
-    return FALSE;
-  }
-  if (!file_exists($dir)) {
-    drupal_set_message(
-      t(
-        'jsonlog: The log directory doesn\'t exist.!breakPlease create the directory \'!dir\'!breakor change the \'Log file\' setting.',
-        array('!dir' => $dir, '!break' => '<br/>'),
-        array('context' => 'module:jsonlog')
-      ),
-      'error'
-    );
-    return FALSE;
-  }
-  if (!file_exists($file)) {
-    if (!touch($file)) {
-      drupal_set_message(
-        t(
-          'jsonlog: The log file doesn\'t exist.!breakPlease create the file \'!file\'!breakor change the \'Log file\' setting.',
-          array('!file' => $file, '!break' => '<br/>'),
-          array('context' => 'module:jsonlog')
-        ),
-        'error'
-      );
-      return FALSE;
-    }
-  }
-  elseif (is_writable($file)) {
-    drupal_set_message(
-      t(
-        'jsonlog: The log file is not writable for the webserver user.!breakPlease check permissions of the file \'!file\'!breakand make sure that it\'s parent directory is executable for the webserver user.',
-        array('!file' => $file, '!break' => '<br/>'),
-        array('context' => 'module:jsonlog')
-      ),
-      'error'
-    );
-    return FALSE;
-  }
-
-  // Temporarily set the conf var to test value
-  // - otherwise jsonlog_watchdog() would still use the old value for this write.
-  $original_file = variable_get('jsonlog_file', '');
-  variable_set('jsonlog_file', $file);
-  try {
-    watchdog(
-      'jsonlog',
-      'Testing watchdog logging - please check if this entry was written to file \'!file\'.',
-      array('!file' => $file),
-      ($threshold = getenv('drupal_jsonlog_severity_threshold')) ? $threshold : variable_get('jsonlog_severity_threshold', WATCHDOG_WARNING)
-    );
-  }
-  catch (Exception $xc) {
-    // Ignore; some watchdog implementation failed, and (probably) threw a (database) PDOException.
-  }
-  // Restore original value.
-  variable_set('jsonlog_file', $original_file);
-
-  drupal_set_message(
-    t(
-      'jsonlog: Logging to \'!file\' seems to work, but please check if that file now contains an entry whose message starts with \'Testing watchdog logging\'.',
-      array('!file' => $file),
-      array('context' => 'module:jsonlog')
-    ),
-    'warning'
-  );
-
-  return TRUE;
-}
-
-/**
  * Implements hook_watchdog().
  *
  * @param array $log_entry
@@ -606,14 +487,16 @@ function jsonlog_watchdog(array $log_entry) {
     // Site ID: Try server environment var before Drupal conf. var.
     if (!($_site_id = getenv('drupal_jsonlog_siteid'))) {
       if (!($_site_id = variable_get('jsonlog_siteid'))) {
-        variable_set('jsonlog_siteid', $_site_id = _jsonlog_default_site_id());
+        module_load_include('inc', 'jsonlog');
+        variable_set('jsonlog_siteid', $_site_id = jsonlog_default_site_id());
       }
     }
 
     // File: Try server environment var before Drupal conf. var.
     if (!($_file = getenv('drupal_jsonlog_file'))) {
       if (!($_file = variable_get('jsonlog_file'))) {
-        if (($_file = _jsonlog_default_file())) {
+        module_load_include('inc', 'jsonlog');
+        if (($_file = jsonlog_default_file())) {
           variable_set('jsonlog_file', $_file);
         }
         else {

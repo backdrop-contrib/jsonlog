@@ -1,3 +1,10 @@
+jsonlog 7.x-1.x, 2014-10-21
+---------------------------
+* Fix negation of writable in filing test (issue #2360577).
+* Moved helper functions which aren't needed - except initially and when administating the module - to include file.
+* jsonlog_test_filing() is now usable for drush.
+* Better phpdoc'umentation.
+
 jsonlog 7.x-1.x, 2014-10-20
 ---------------------------
 * Better error handling when testing log filing, and some admin page improvements.
