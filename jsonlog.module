@@ -251,11 +251,11 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
       'label' => t('Version', array(), array('context' => 'module:jsonlog')),
       'value' => 1,
     ),
-    'event_id' => array(
+    'message_id' => array(
       'custom' => TRUE,
-      'name' => 'event_id',
+      'name' => 'message_id',
       'label' => t(
-        'Event ID (!site_id + unique ID)',
+        'Message ID (!site_id + unique ID)',
         array('!site_id' => $t_siteId),
         array('context' => 'module:jsonlog')
       ),
@@ -448,7 +448,7 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
  *  JSON fields (watchdog standard fields are not explained here):
  *  - \@timestamp: ISO-8601 milliseconds timestamp instead of watchdog's native seconds timestamp
  *  - \@version: (always) 1
- *  - event_id: jsonlog site ID to unique padding
+ *  - message_id: jsonlog site ID + unique padding
  *  - site_id: (default) server's hostname + database name + database prefix (if any)
  *  - tags: comma-separated list; becomes array
  *  - type
@@ -589,7 +589,7 @@ function jsonlog_watchdog(array $log_entry) {
   $entry->{'@timestamp'} = substr(gmdate('c', $seconds), 0, 19) . '.' . $millis . 'Z';
 
   $entry->{'@version'} = 1;
-  $entry->event_id = uniqid($_site_id, TRUE);
+  $entry->message_id = uniqid($_site_id, TRUE);
   $entry->site_id = $_site_id;
   $entry->tags = $_tags;
 

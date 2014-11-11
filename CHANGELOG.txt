@@ -1,6 +1,8 @@
 jsonlog 7.x-1.x, 2014-11-11
 ---------------------------
 * Use file locking (issue #2373039).
+* Renamed 'event_id' to 'message_id'.
+* Release 7.x-1.2.
 
 jsonlog 7.x-1.x, 2014-10-21
 ---------------------------
