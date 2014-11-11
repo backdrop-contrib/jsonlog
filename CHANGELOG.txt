@@ -1,3 +1,7 @@
+jsonlog 7.x-1.x, 2014-11-11
+---------------------------
+* Use file locking (issue #2373039).
+
 jsonlog 7.x-1.x, 2014-10-21
 ---------------------------
 * Fix negation of writable in filing test (issue #2360577).

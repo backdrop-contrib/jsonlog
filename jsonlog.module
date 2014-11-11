@@ -610,8 +610,9 @@ function jsonlog_watchdog(array $log_entry) {
   $entry->trunc = $truncation;
 
 
-  // File append. If failure: log filing error to web server's default log.
-  if (!file_put_contents($_file, "\n" . drupal_json_encode($entry), FILE_APPEND)) {
+  // File append, using lock (write, doesn't prevent reading).
+  // If failure: log filing error to web server's default log.
+  if (!file_put_contents($_file, "\n" . drupal_json_encode($entry), FILE_APPEND | LOCK_EX)) {
     error_log('Drupal jsonlog, site ID[' . $_site_id . '], failed to write to file[' . $_file . '].');
   }
 }
