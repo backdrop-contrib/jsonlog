@@ -190,7 +190,7 @@ function jsonlog_test_filing($file = '') {
   // - otherwise jsonlog_watchdog() would still use the old value for this write.
   $original_file = '';
   if ($restore_file_setting) {
-    $original_file = variable_get('jsonlog_file', '');
+    $original_file = variable_get('jsonlog_file', NULL);
     variable_set('jsonlog_file', $file);
   }
 
@@ -208,7 +208,12 @@ function jsonlog_test_filing($file = '') {
 
   // Restore original value.
   if ($restore_file_setting) {
-    variable_set('jsonlog_file', $original_file);
+    if ($original_file === NULL) {
+      variable_del('jsonlog_file');
+    }
+    else {
+      variable_set('jsonlog_file', $original_file);
+    }
   }
 
   if (!$is_drush) {
