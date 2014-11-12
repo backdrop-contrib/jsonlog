@@ -1,8 +1,9 @@
 jsonlog 7.x-1.x, 2014-11-12
 ---------------------------
-* Fixed that settings form didn't work at all.
+* Fixed that settings form didn't work at all (issue #2373857).
 * Site id and file settings are required.
 * Test filing shan't manipulate drupal file setting unnecessarily.
+* Release 7.x-1.3.
 
 jsonlog 7.x-1.x, 2014-11-11
 ---------------------------
