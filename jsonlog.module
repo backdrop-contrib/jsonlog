@@ -23,6 +23,8 @@ define('JSONLOG_TRUNCATE_DEFAULT', 4);
 function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
   module_load_include('inc', 'jsonlog');
 
+  $form['#attributes']['autocomplete'] = 'off';
+
   drupal_add_css(
     drupal_get_path('module', 'jsonlog') . '/jsonlog.admin.css',
     array('type' => 'file', 'group' => CSS_DEFAULT, 'preprocess' => FALSE, 'every_page' => FALSE)
@@ -70,12 +72,11 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
     '#description' => t('Emergency is not an option.', array(), array('context' => 'module:jsonlog')),
     '#options' => $severity_levels,
     '#default_value' => $severity_threshold,
-    '#attributes' => array(
-      'autocomplete' => 'off',
-    ),
   );
   if ($overridden) {
-    $form['jsonlog']['jsonlog_severity_threshold']['#attributes']['disabled'] = 'disabled';
+    $form['jsonlog']['jsonlog_severity_threshold']['#attributes'] = array(
+      'disabled' => 'disabled',
+    );
   }
 
   // Truncation.
@@ -104,12 +105,11 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
     '#default_value' => $truncate,
     '#size' => 5,
     '#field_suffix' => t('Kb', array(), array('context' => 'module:jsonlog')),
-    '#attributes' => array(
-      'autocomplete' => 'off',
-    ),
   );
   if ($overridden) {
-    $form['jsonlog']['jsonlog_truncate']['#attributes']['disabled'] = 'disabled';
+    $form['jsonlog']['jsonlog_truncate']['#attributes'] = array(
+      'disabled' => 'disabled',
+    );
   }
 
   // Site ID.
@@ -117,7 +117,9 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
     $overridden = TRUE;
   }
   else {
-    $site_id = $siteid_default;
+    if (!($site_id = variable_get('jsonlog_siteid'))) {
+      $site_id = $siteid_default;
+    }
     $overridden = FALSE;
   }
   $form['jsonlog']['jsonlog_siteid'] = array(
@@ -135,13 +137,13 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
       ),
       array('context' => 'module:jsonlog')
     ),
+    '#required' => TRUE,
     '#default_value' => $site_id,
-    '#attributes' => array(
-      'autocomplete' => 'off',
-    ),
   );
   if ($overridden) {
-    $form['jsonlog']['jsonlog_siteid']['#attributes']['disabled'] = 'disabled';
+    $form['jsonlog']['jsonlog_siteid']['#attributes'] = array(
+      'disabled' => 'disabled',
+    );
   }
 
   // File.
@@ -149,7 +151,9 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
     $overridden = TRUE;
   }
   else {
-    $file = $file_default;
+    if (!($file = variable_get('jsonlog_file'))) {
+      $file = $file_default;
+    }
     $overridden = FALSE;
   }
   $form['jsonlog']['jsonlog_file'] = array(
@@ -168,14 +172,14 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
       ),
       array('context' => 'module:jsonlog')
     ),
+    '#required' => TRUE,
     '#default_value' => $file,
     '#size' => 100,
-    '#attributes' => array(
-      'autocomplete' => 'off',
-    ),
   );
   if ($overridden) {
-    $form['jsonlog']['jsonlog_file']['#attributes']['disabled'] = 'disabled';
+    $form['jsonlog']['jsonlog_file']['#attributes'] = array(
+      'disabled' => 'disabled',
+    );
   }
 
   // Test logging.
@@ -185,9 +189,6 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
     '#description' => t('You\'ll be warned and guided along if it doesn\'t work correctly.', array(), array('context' => 'module:jsonlog')),
     '#default_value' => 0,
     '#title_display' => 'before',
-    '#attributes' => array(
-      'autocomplete' => 'off',
-    ),
   );
 
   // Tags.
@@ -203,9 +204,6 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
     '#default_value' => $tags_site = variable_get('jsonlog_tags', ''),
     '#size' => 100,
     '#field_prefix' => $tags_server !== '' ? ($tags_server . ', ') : '',
-    '#attributes' => array(
-      'autocomplete' => 'off',
-    ),
   );
 
 
@@ -363,8 +361,30 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
       ),
   );
 
+  $form['#validate'][] = 'jsonlog_form_system_logging_settings_validate';
+
   // Prepend our submit handler; we need to get in first, otherwise our changes to form values amounts to nothing.
   array_unshift($form['#submit'], 'jsonlog_form_system_logging_settings_submit');
+
+  return system_settings_form($form);
+}
+
+/**
+ * @param array $form
+ * @param array $form_state
+ */
+function jsonlog_form_system_logging_settings_validate($form, $form_state) {
+  $values =& $form_state['values'];
+
+  // Non-empty truncate must be non-negative integer.
+  if ($values['jsonlog_truncate'] !== '' && ($value = trim($values['jsonlog_truncate'])) !== '') {
+    if (!preg_match('/^\d+$/', $value)) {
+      form_set_error(
+        'jsonlog_truncate',
+        t('\'@field\' is not a non-negative integer.', array('@field' => t('Truncate events to')))
+      );
+    }
+  }
 }
 
 /**
@@ -385,27 +405,21 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
     'jsonlog_file',
   );
 
-  // Don't save a var if there's a equivalent server environment var set.
   foreach ($fields as $name) {
-    if (getenv('drupal_' . $name) !== FALSE) {
-      unset($form_state['input'][$name], $values[$name]);
-    }
-    else {
-      // Otherwise: trim all values.
-      $values[$name] = trim($values[$name]);
+    // Trim all values.
+    $values[$name] = trim($values[$name]);
 
-      switch ($name) {
-        case 'jsonlog_truncate':
-          if (!$values['jsonlog_truncate'] || $values['jsonlog_truncate'] < 0) {
-            $values['jsonlog_truncate'] = 0;
-          }
-          break;
-        case 'jsonlog_file':
-          if ($values['jsonlog_file']) {
-            $file = $values['jsonlog_file'];
-          }
-          break;
-      }
+    switch ($name) {
+      case 'jsonlog_truncate':
+        if (!$values['jsonlog_truncate']) {
+          $values['jsonlog_truncate'] = 0;
+        }
+        break;
+      case 'jsonlog_file':
+        if ($values['jsonlog_file']) {
+          $file = $values['jsonlog_file'];
+        }
+        break;
     }
   }
 

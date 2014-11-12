@@ -66,7 +66,11 @@ function jsonlog_default_file() {
   }
 
   if ($dir) {
-    return $dir . '/drupal-jsonlog/' . variable_get('jsonlog_siteid', jsonlog_default_site_id()) . '.log.json';
+    if (!($site_id = variable_get('jsonlog_siteid'))) {
+      $site_id = jsonlog_default_site_id();
+    }
+
+    return $dir . '/drupal-jsonlog/' . $site_id . '.log.json';
   }
   return '';
 }
@@ -86,16 +90,22 @@ function jsonlog_default_file() {
 function jsonlog_test_filing($file = '') {
   $is_drush = drupal_is_cli();
 
-  if (!$file) {
-    if (!($file = variable_get('jsonlog_file'))) {
-      if (!($_file = jsonlog_default_file())) {
-        if (!$is_drush) {
-          drupal_set_message(t('jsonlog: Failed to establish the server\'s default logging directory.'), 'error');
+  if ($file) {
+    $restore_file_setting = TRUE;
+  }
+  else {
+    $restore_file_setting = FALSE;
+    if (!($file = getenv('drupal_jsonlog_file'))) {
+      if (!($file = variable_get('jsonlog_file'))) {
+        if (!($_file = jsonlog_default_file())) {
+          if (!$is_drush) {
+            drupal_set_message(t('jsonlog: Failed to establish the server\'s default logging directory.'), 'error');
+          }
+          else {
+            drush_log(dt('jsonlog: Failed to establish the server\'s default logging directory.'), 'error');
+          }
+          return FALSE;
         }
-        else {
-          drush_log(dt('jsonlog: Failed to establish the server\'s default logging directory.'), 'error');
-        }
-        return FALSE;
       }
     }
   }
@@ -178,8 +188,12 @@ function jsonlog_test_filing($file = '') {
 
   // Temporarily set the conf var to test value
   // - otherwise jsonlog_watchdog() would still use the old value for this write.
-  $original_file = variable_get('jsonlog_file', '');
-  variable_set('jsonlog_file', $file);
+  $original_file = '';
+  if ($restore_file_setting) {
+    $original_file = variable_get('jsonlog_file', '');
+    variable_set('jsonlog_file', $file);
+  }
+
   try {
     watchdog(
       'jsonlog',
@@ -191,8 +205,11 @@ function jsonlog_test_filing($file = '') {
   catch (Exception $xc) {
     // Ignore; some watchdog implementation failed, and (probably) threw a (database) PDOException.
   }
+
   // Restore original value.
-  variable_set('jsonlog_file', $original_file);
+  if ($restore_file_setting) {
+    variable_set('jsonlog_file', $original_file);
+  }
 
   if (!$is_drush) {
     drupal_set_message(

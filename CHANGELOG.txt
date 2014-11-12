@@ -1,3 +1,9 @@
+jsonlog 7.x-1.x, 2014-11-12
+---------------------------
+* Fixed that settings form didn't work at all.
+* Site id and file settings are required.
+* Test filing shan't manipulate drupal file setting unnecessarily.
+
 jsonlog 7.x-1.x, 2014-11-11
 ---------------------------
 * Use file locking (issue #2373039).
