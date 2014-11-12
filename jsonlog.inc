@@ -188,7 +188,7 @@ function jsonlog_test_filing($file = '') {
 
   // Temporarily set the conf var to test value
   // - otherwise jsonlog_watchdog() would still use the old value for this write.
-  $original_file = '';
+  $original_file = NULL;
   if ($restore_file_setting) {
     $original_file = variable_get('jsonlog_file', NULL);
     variable_set('jsonlog_file', $file);
