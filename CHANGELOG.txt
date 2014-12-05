@@ -1,3 +1,7 @@
+jsonlog 7.x-1.x, 2014-12-05
+---------------------------
+* Watchdog 'type' is now being logged as JSON 'category', and JSON 'type' is always 'drupal'.
+
 jsonlog 7.x-1.x, 2014-11-12
 ---------------------------
 * Fixed that settings form didn't work at all (issue #2373857).

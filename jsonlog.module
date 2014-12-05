@@ -273,6 +273,10 @@ function jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
     ),
     'type' => array(
       'label' => t('Type', array(), array('context' => 'module:jsonlog')),
+      'value' => 'drupal',
+    ),
+    'category' => array(
+      'label' => t('Category (watchdog \'type\')', array(), array('context' => 'module:jsonlog')),
       'value' => 'some_module_name',
     ),
     'severity' => array(
@@ -607,7 +611,8 @@ function jsonlog_watchdog(array $log_entry) {
   $entry->site_id = $_site_id;
   $entry->tags = $_tags;
 
-  $entry->type = $log_entry['type'];
+  $entry->type = 'drupal';
+  $entry->category = $log_entry['type'];
 
   $entry->severity = $_severity[$log_entry['severity']];
 
