@@ -3,7 +3,14 @@
  * JSONlog module.
  */
 
-
+/* Don't make table ridiculously wide */
+fieldset#edit-jsonlog table.sticky-header,
+fieldset#edit-jsonlog table.sticky-table {
+  display: table-cell;
+  border-top: 0;
+  border-right: 0;
+  border-left: 0;
+}
 div.form-item.form-type-textfield.form-item-jsonlog-truncate > input {
   text-align: right;
 }
