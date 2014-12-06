@@ -1,3 +1,9 @@
+jsonlog 7.x-1.x, 2014-12-06
+---------------------------
+* Now defaults to write to daily log files instead of one file forever.
+* Replaced the setting jsonlog_file with jsonlog_dir.
+* Watchdog 'type' is now being logged as JSON 'subtype', and JSON 'type' is always 'drupal'.
+
 jsonlog 7.x-1.x, 2014-12-05
 ---------------------------
 * Watchdog 'type' is now being logged as JSON 'category', and JSON 'type' is always 'drupal'.
