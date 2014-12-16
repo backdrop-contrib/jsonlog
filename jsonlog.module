@@ -225,9 +225,8 @@ function jsonlog_watchdog(array $log_entry) {
   if (($message = $log_entry['message']) && $message{0} === '<') {
     $message = strip_tags($message);
   }
-  // Escape newline, (drupal_)json_encode() doesn't escape control characters (Inspect uses newline).
   // Escape null control char.
-  $message = str_replace(array("\n", "\0"), array('\\n', '_NUL_'), $message);
+  $message = str_replace("\0", '_NUL_', $message);
 
   // If truncation required, start by skipping variables.
   $variables = $log_entry['variables'];
