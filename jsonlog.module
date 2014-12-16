@@ -225,7 +225,7 @@ function jsonlog_watchdog(array $log_entry) {
   if (($message = $log_entry['message']) && $message{0} === '<') {
     $message = strip_tags($message);
   }
-  // Escape null control char.
+  // Escape null byte.
   $message = str_replace("\0", '_NUL_', $message);
 
   // If truncation required, start by skipping variables.

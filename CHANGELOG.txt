@@ -2,6 +2,7 @@ jsonlog 7.x-2.x, 2014-12-16
 ---------------------------
 * Don't escape newlines, (drupal_)json_encode() does that.
 * Increased default truncation to 64 (Kb, was 4).
+* Release 7.x-2.0.
 
 jsonlog 7.x-2.x, 2014-12-10
 ---------------------------
