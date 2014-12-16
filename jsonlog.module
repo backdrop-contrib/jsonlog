@@ -10,7 +10,7 @@
  *
  * @type integer
  */
-define('JSONLOG_TRUNCATE_DEFAULT', 4);
+define('JSONLOG_TRUNCATE_DEFAULT', 64);
 
 /**
  * Adds this module's setting fields to the system logging settings form.

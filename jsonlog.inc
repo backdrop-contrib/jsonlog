@@ -375,7 +375,7 @@ function _jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
       array('context' => 'module:jsonlog')
     ),
     '#description' => t(
-      'Zero means no truncation.!breakLog entries longer than the file system\'s block size should not result in garbled logs (due to concurrent file writes), because the logger uses write locking.!breakThe default block size of ext3 (common *nix file system) is !default Kb.',
+      'Zero means no truncation.!breakLog entries longer than the file system\'s block size (typically 4 Kb) should not result in garbled logs (due to concurrent file writes), because the logger uses write locking.!breakDefaults to !default (Kb).',
       array(
         '!default' => JSONLOG_TRUNCATE_DEFAULT,
         '!break' => '<br/>',
