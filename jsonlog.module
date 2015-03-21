@@ -228,15 +228,20 @@ function jsonlog_watchdog(array $log_entry) {
   // Escape null byte.
   $message = str_replace("\0", '_NUL_', $message);
 
-  // If truncation required, start by skipping variables.
-  $variables = $log_entry['variables'];
+  // Replace variables.
+  if (($variables = $log_entry['variables'])) {
+    // Doesn't use format_string() because we don't want HTML placeholder tags.
+    foreach ($variables as $key => $value) {
+      if ($key[0] != '!') {
+        $variables[$key] = check_plain($value);
+      }
+    }
+    $message = strtr($message, $variables);
+    unset($variables);
+  }
 
   // Truncate message.
   if ($_truncate && ($le = strlen($message)) > $_truncate) { // Deliberately not drupal_strlen(); need 'physical' length, not (possibly shorter) multibyte length.
-    // Flag variables truncated by setting it to false.
-    if ($variables) {
-      $variables = FALSE;
-    }
     // Truncate multibyte safe until ASCII length is equal to/less than max. byte length.
     $truncation = array(
       $le,
@@ -276,7 +281,14 @@ function jsonlog_watchdog(array $log_entry) {
 
   $entry->client_ip = $log_entry['ip'];
   $entry->link = !$log_entry['link'] ? NULL : strip_tags($log_entry['link']);
-  $entry->variables = $variables ? $variables : NULL;
+
+  // Since message/variables replacement was implemented, variables will always
+  // be empty. A bit silly to keep the variables property at all then, but for
+  // backwards compatibility - and the fact that folks might expect the
+  // property to exist because it's part the of the hook_watchdog() properties
+  // - we keep setting it.
+  $entry->variables = NULL;
+
   $entry->trunc = $truncation;
 
 
