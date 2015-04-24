@@ -639,8 +639,8 @@ function _jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
       'value' => '',
     ),
     'variables' => array(
-      'label' => t('Variables (null or object hash map)', array(), array('context' => 'module:jsonlog')),
-      'value' => '',
+      'label' => t('Variables (always null, variables get replaced into message)', array(), array('context' => 'module:jsonlog')),
+      'value' => NULL,
     ),
     'truncation' => array(
       'custom' => TRUE,
@@ -662,7 +662,7 @@ function _jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
       'data' => array(
         $props['label'],
         !empty($props['name']) ? $props['name'] : $name,
-        $props['value']
+        $props['value'] === NULL ? 'null' : $props['value'],
       ),
     );
   }
