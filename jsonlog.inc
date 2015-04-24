@@ -32,7 +32,8 @@ function jsonlog_default_site_id() {
  * Establish default logging dir.
  *
  * Directory default:
- * PHP:ini error_log - unless that is 'syslog' (then checks the usual suspects /var/log/...) - plus /drupal-jsonlog.
+ * PHP:ini error_log - unless that is 'syslog' (then checks the usual suspects
+ * /var/log/...) - plus /drupal-jsonlog.
  *
  * @return string
  *   Empty upon failure.
@@ -71,7 +72,8 @@ function jsonlog_default_dir() {
 /**
  * Checks if log dir+file exists and is writable, and logs to watchdog.
  *
- * Usable by drush script; prints messages via drush_log() instead drupal_set_message() if in CLI mode.
+ * Usable by drush script; prints messages via drush_log() instead
+ * drupal_set_message() if in CLI mode.
  *
  * @see jsonlog_default_dir()
  *
@@ -242,7 +244,7 @@ function jsonlog_test_filing($file = '') {
   }
 
   // Temporarily set the conf var to test value
-  // - otherwise jsonlog_watchdog() would still use the old value for this write.
+  // - otherwise jsonlog_watchdog() would still use the old value for this write
   $original_dir = NULL;
   if ($restore_dir_setting) {
     $original_dir = variable_get('jsonlog_dir', NULL);
@@ -258,7 +260,8 @@ function jsonlog_test_filing($file = '') {
     );
   }
   catch (Exception $xc) {
-    // Ignore; some watchdog implementation failed, and (probably) threw a (database) PDOException.
+    // Ignore; some watchdog implementation failed, and (probably) threw a
+    // (database) PDOException.
   }
 
   // Restore original value.
@@ -320,7 +323,8 @@ function _jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
   $t_siteId = t('Site ID', array(), array('context' => 'module:jsonlog'));
   $t_overridden = t(' !sml¡overridden!!_sml', array('!sml' => '<small>', '!_sml' => '</small>'), array('context' => 'module:jsonlog'));
 
-  // Using 'emergency' as threshold is simply not an option; because it's falsy (expensive type checks, FALSE), and wouldn't make sense anyway.
+  // Using 'emergency' as threshold is simply not an option; because it's falsy
+  // (expensive type checks, FALSE), and wouldn't make sense anyway.
   $severity_levels = watchdog_severity_levels();
   unset($severity_levels[0]);
 
@@ -426,7 +430,8 @@ function _jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
     );
   }
 
-  // Timestamped file; default 'Ymd', values 'Ymd' (~ YYYYMMDD)|'YW' (~ YYYYWW)|'Ym' (~ YYYYMM)|'none'.
+  // Timestamped file; default 'Ymd',
+  // values: 'Ymd' (~ YYYYMMDD)|'YW' (~ YYYYWW)|'Ym' (~ YYYYMM)|'none'.
   if (($file_time = getenv('drupal_jsonlog_file_time'))) {
     $overridden = TRUE;
   }
@@ -684,7 +689,8 @@ function _jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
 
   $form['#validate'][] = 'jsonlog_form_system_logging_settings_validate';
 
-  // Prepend our submit handler; we need to get in first, otherwise our changes to form values amounts to nothing.
+  // Prepend our submit handler; we need to get in first, otherwise our changes
+  // to form values amounts to nothing.
   array_unshift($form['#submit'], 'jsonlog_form_system_logging_settings_submit');
 
   return system_settings_form($form);

@@ -102,18 +102,22 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
 }
 
 /**
- * Logs any watchdog call - at or above a certain severity threshold - as JSON to a custom log file.
+ * Logs any watchdog call - at or above a certain severity threshold - as JSON
+ * to a custom log file.
  *
  * Default severity threshold: warning.
  *
  * Prefers server environment variables for Drupal conf variables.
- * Any jsonlog conf variable may be overridden by a 'drupal_[jsonlog variable]' server environment var.
+ * Any jsonlog conf variable may be overridden by a 'drupal_[jsonlog variable]'
+ * server environment var.
  *
  *  JSON fields (watchdog standard fields are not explained here):
- *  - \@timestamp: ISO-8601 milliseconds timestamp instead of watchdog's native seconds timestamp
+ *  - \@timestamp: ISO-8601 milliseconds timestamp instead of watchdog's native
+ *    seconds timestamp
  *  - \@version: (always) 1
  *  - message_id: jsonlog site ID + unique padding
- *  - site_id: (default) server's hostname + database name + database prefix (if any)
+ *  - site_id: (default) server's hostname + database name + database prefix
+ *    (if any)
  *  - tags: comma-separated list; becomes array
  *  - type
  *  - severity
@@ -125,7 +129,8 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
  *  - client_ip: equivalent to watchdog standard 'ip' field
  *  - link
  *  - variables: watchdog standard, except null if empty
- *  - trunc: null if the log entry as a whole doesn't exceed the json_truncate setting; otherwise array of original length, truncated length
+ *  - trunc: null if the log entry as a whole doesn't exceed the json_truncate
+ *    setting; otherwise array of original length, truncated length
  *
  * Implements hook_watchdog().
  *
@@ -134,9 +139,11 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
 function jsonlog_watchdog(array $log_entry) {
   static $_threshold, $_site_id, $_file, $_truncate, $_severity, $_tags;
 
-  // Don't load more settings than threshold, in case current entry isn't sufficiently severe.
+  // Don't load more settings than threshold, in case current entry isn't
+  // sufficiently severe.
   if (!$_threshold) {
-    // A threshold of zero (emergency) wouldnt make sense in the real world, so no reason to check by type (boolean).
+    // A threshold of zero (emergency) wouldnt make sense in the real world,
+    // so no reason to check by type (boolean).
     if (!($_threshold = getenv('drupal_jsonlog_severity_threshold'))) {
       $_threshold = variable_get('jsonlog_severity_threshold', WATCHDOG_WARNING);
     }
@@ -184,7 +191,8 @@ function jsonlog_watchdog(array $log_entry) {
       $_truncate *= 1024;
       // Substract estimated max length of everything but message content.
       $_truncate -= 768;
-      // Message will get longer when JSON encoded, because of hex encoding of <>&" chars.
+      // Message will get longer when JSON encoded, because of hex encoding of
+      // <>&" chars.
       $_truncate *= 7 / 8;
     }
 
@@ -221,35 +229,40 @@ function jsonlog_watchdog(array $log_entry) {
 
   $entry = new stdClass();
 
-  // Strip tags if message starts with < (Inspect logs in tag).
-  if (($message = $log_entry['message']) && $message{0} === '<') {
-    $message = strip_tags($message);
-  }
-  // Escape null byte.
-  $message = str_replace("\0", '_NUL_', $message);
+  $truncation = NULL;
 
-  // Replace variables.
-  if (($variables = $log_entry['variables'])) {
-    // Doesn't use format_string() because we don't want HTML placeholder tags.
-    foreach ($variables as $key => $value) {
-      if ($key[0] != '!') {
-        $variables[$key] = check_plain($value);
+  if (($message = $log_entry['message'])) {
+
+    // Replace variables.
+    if (($variables = $log_entry['variables'])) {
+      // Doesnt use format_string() because we don't want HTML placeholder tags.
+      foreach ($variables as $key => $value) {
+        if ($key[0] != '!') {
+          $variables[$key] = check_plain($value);
+        }
       }
+      $message = strtr($message, $variables);
+      unset($variables);
     }
-    $message = strtr($message, $variables);
-    unset($variables);
-  }
 
-  // Truncate message.
-  if ($_truncate && ($le = strlen($message)) > $_truncate) { // Deliberately not drupal_strlen(); need 'physical' length, not (possibly shorter) multibyte length.
-    // Truncate multibyte safe until ASCII length is equal to/less than max. byte length.
-    $truncation = array(
-      $le,
-      strlen($message = drupal_truncate_bytes($message, (int) $_truncate))
-    );
-  }
-  else {
-    $truncation = NULL;
+    // Strip tags if message starts with < (Inspect logs in tag).
+    if ($message{0} === '<') {
+      $message = strip_tags($message);
+    }
+
+    // Escape null byte.
+    $message = str_replace("\0", '_NUL_', $message);
+
+    // Truncate message.
+    // Deliberately multibyte length.
+    if ($_truncate && ($le = strlen($message)) > $_truncate) {
+      // Truncate multibyte safe until ASCII length is equal to/less than max.
+      // byte length.
+      $truncation = array(
+        $le,
+        strlen($message = drupal_truncate_bytes($message, (int) $_truncate))
+      );
+    }
   }
 
   $entry->message = $message;
