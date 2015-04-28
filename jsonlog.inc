@@ -331,11 +331,15 @@ function _jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
   $form['jsonlog'] = array(
     '#type' => 'fieldset',
     '#title' => 'JSON Log',
-    '#description' => t(
-        'Any server variable \'drupal_[jsonlog_varable_name]\' will override \'[jsonlog_varable_name]\' conf. variable,!breakexcept for !emphtags!_emph (will be combined).', array('!break' => '<br/>', '!emph' => '<em>', '!_emph' => '</em>'), array('context' => 'module:jsonlog'))
-      . '<br/>' . t('Tip: Server environment variables set in virtual host or .htaccess won\'t be visible by drush/CLI; /etc/environment might be your friend instead.', array('!break' => '<br/>'), array('context' => 'module:jsonlog')),
     '#collapsible' => TRUE,
     '#collapsed' => FALSE,
+  );
+  $form['jsonlog']['description'] = array(
+    '#type' => 'markup',
+    '#markup' => '<p>'
+      . t('Any server variable \'drupal_[jsonlog_varable_name]\' will override \'[jsonlog_varable_name]\' drupal conf. variable,!breakexcept for !emphtags!_emph (will be combined).', array('!break' => '<br/>', '!emph' => '<em>', '!_emph' => '</em>'), array('context' => 'module:jsonlog'))
+      . '<br/>' . t('Tip: Server environment variables set in virtual host or .htaccess won\'t be visible by drush/CLI; /etc/environment might be your friend instead.', array('!break' => '<br/>'), array('context' => 'module:jsonlog'))
+      . '</p>',
   );
 
   // Severity threshold.
@@ -493,7 +497,7 @@ function _jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
       ),
       array('context' => 'module:jsonlog')
     ),
-    '#required' => TRUE,
+    '#required' => FALSE,
     '#default_value' => $dir,
     '#size' => 80,
     '#field_suffix' => '/' . $site_id . ($file_time == 'none' ? '' : ('.' . date($file_time))) . '.json.log',

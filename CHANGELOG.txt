@@ -1,3 +1,16 @@
+jsonlog 7.x-2.x, 2015-04-28
+---------------------------
+- Reset jsonlog_dir to default by submitting empty jsonlog_dir field.
+- Settings page: fieldsets have no description - doh.
+
+jsonlog 7.x-2.x, 2015-04-24
+---------------------------
+- Variable replacement must take place _before_ escaping message.
+
+jsonlog 7.x-2.x, 2015-03-21
+---------------------------
+- Replace variables into message.
+
 jsonlog 7.x-2.x, 2014-12-16
 ---------------------------
 * Don't escape newlines, (drupal_)json_encode() does that.

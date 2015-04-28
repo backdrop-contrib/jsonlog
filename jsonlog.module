@@ -54,6 +54,8 @@ function jsonlog_form_system_logging_settings_validate($form, $form_state) {
  * @param array $form_state
  */
 function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
+  module_load_include('inc', 'jsonlog');
+
   $values =& $form_state['values'];
 
   $fields = array(
@@ -70,6 +72,9 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
   }
   if (!$values['jsonlog_truncate']) {
     $values['jsonlog_truncate'] = 0;
+  }
+  if (!$values['jsonlog_dir']) {
+    $values['jsonlog_dir'] = jsonlog_default_dir();
   }
 
   // Tags.
