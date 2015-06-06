@@ -307,20 +307,17 @@ function jsonlog_watchdog(array $log_entry) {
 
   // If link is an integer (or 'integer') it may be an event/error code;
   // the Inspect module exploits link for that purpose.
-  if (!$log_entry['link']) {
+  if (!($link = $log_entry['link'])) {
     $entry->link = NULL;
     $entry->code = 0;
   }
+  elseif (ctype_digit($link)) {
+    $entry->link = NULL;
+    $entry->code = (int) $link;
+  }
   else {
-    $link = strip_tags($log_entry['link']);
-    if (ctype_digit($link)) {
-      $entry->link = NULL;
-      $entry->code = (int) $link;
-    }
-    else {
-      $entry->link = $link;
-      $entry->code = 0;
-    }
+    $entry->link = strip_tags($link);
+    $entry->code = 0;
   }
 
   // Since message/variables replacement was implemented, variables will always
