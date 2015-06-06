@@ -1,3 +1,10 @@
+jsonlog 7.x-2.x, 2015-06-06
+---------------------------
+- New 'canonical' name property for simpler identification across load balanced
+  site instances.
+- Support event/error 'code'; an exploitation of Drupal watchdog's 'link'
+  property (when that is integer or 'integer').
+
 jsonlog 7.x-2.x, 2015-04-28
 ---------------------------
 - Reset jsonlog_dir to default by submitting empty jsonlog_dir field.

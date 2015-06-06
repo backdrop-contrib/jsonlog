@@ -12,6 +12,7 @@ function jsonlog_uninstall() {
   variable_del('jsonlog_severity_threshold');
   variable_del('jsonlog_truncate');
   variable_del('jsonlog_siteid');
+  variable_del('jsonlog_canonical');
   variable_del('jsonlog_dir');
   variable_del('jsonlog_file_time');
   variable_del('jsonlog_tags');

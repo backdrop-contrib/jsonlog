@@ -142,7 +142,7 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
  * @param array $log_entry
  */
 function jsonlog_watchdog(array $log_entry) {
-  static $_threshold, $_site_id, $_file, $_truncate, $_severity, $_tags;
+  static $_threshold, $_site_id, $_canonical, $_file, $_truncate, $_severity, $_tags;
 
   // Don't load more settings than threshold, in case current entry isn't
   // sufficiently severe.
@@ -166,6 +166,11 @@ function jsonlog_watchdog(array $log_entry) {
         module_load_include('inc', 'jsonlog');
         variable_set('jsonlog_siteid', $_site_id = jsonlog_default_site_id());
       }
+    }
+
+    // Canonical site identifier across site instances.
+    if (!($_canonical = getenv('drupal_jsonlog_canonical'))) {
+      $_canonical = variable_get('jsonlog_canonical', '');
     }
 
     // Dir.
@@ -283,6 +288,7 @@ function jsonlog_watchdog(array $log_entry) {
   $entry->{'@version'} = 1;
   $entry->message_id = uniqid($_site_id, TRUE);
   $entry->site_id = $_site_id;
+  $entry->canonical = $_canonical;
   $entry->tags = $_tags;
 
   $entry->type = 'drupal';
@@ -298,7 +304,24 @@ function jsonlog_watchdog(array $log_entry) {
   $entry->username = $uid && !empty($GLOBALS['user']->name) ? $GLOBALS['user']->name : '';
 
   $entry->client_ip = $log_entry['ip'];
-  $entry->link = !$log_entry['link'] ? NULL : strip_tags($log_entry['link']);
+
+  // If link is an integer (or 'integer') it may be an event/error code;
+  // the Inspect module exploits link for that purpose.
+  if (!$log_entry['link']) {
+    $entry->link = NULL;
+    $entry->code = 0;
+  }
+  else {
+    $link = strip_tags($log_entry['link']);
+    if (ctype_digit($link)) {
+      $entry->link = NULL;
+      $entry->code = (int) $link;
+    }
+    else {
+      $entry->link = $link;
+      $entry->code = 0;
+    }
+  }
 
   // Since message/variables replacement was implemented, variables will always
   // be empty. A bit silly to keep the variables property at all then, but for

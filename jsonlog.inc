@@ -434,6 +434,35 @@ function _jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
     );
   }
 
+  // Canonical site identifier across site instances.
+  if (($canonical = getenv('drupal_jsonlog_canonical'))) {
+    $overridden = TRUE;
+  }
+  else {
+    $canonical = variable_get('jsonlog_canonical', '');
+    $overridden = FALSE;
+  }
+  $form['jsonlog']['jsonlog_canonical'] = array(
+    '#type' => 'textfield',
+    '#title' => t(
+      'Canonical site name !sml[jsonlog_canonical]!_sml!overridden',
+      array('!overridden' => $overridden ? $t_overridden : '', '!sml' => '<small>', '!_sml' => '</small>'),
+      array('context' => 'module:jsonlog')
+    ),
+    '#description' => t(
+      'For simpler identification across load balanced site instances.',
+      array(),
+      array('context' => 'module:jsonlog')
+    ),
+    '#required' => FALSE,
+    '#default_value' => $canonical,
+  );
+  if ($overridden) {
+    $form['jsonlog']['jsonlog_canonical']['#attributes'] = array(
+      'disabled' => 'disabled',
+    );
+  }
+
   // Timestamped file; default 'Ymd',
   // values: 'Ymd' (~ YYYYMMDD)|'YW' (~ YYYYWW)|'Ym' (~ YYYYMM)|'none'.
   if (($file_time = getenv('drupal_jsonlog_file_time'))) {
@@ -587,9 +616,13 @@ function _jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
     ),
     'site_id' => array(
       'custom' => TRUE,
-      'name' => 'site_id',
       'label' => $t_siteId,
       'value' => $site_id,
+    ),
+    'canonical' => array(
+      'custom' => TRUE,
+      'label' => t('Canonical', array(), array('context' => 'module:jsonlog')),
+      'value' => $canonical,
     ),
     'tags' => array(
       'custom' => TRUE,
@@ -639,8 +672,13 @@ function _jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
       'value' => ip_address(),
     ),
     'link' => array(
-      'label' => t('Link', array(), array('context' => 'module:jsonlog')),
-      'value' => '',
+      'label' => t('Link (URL path or NULL)', array(), array('context' => 'module:jsonlog')),
+      'value' => NULL,
+    ),
+    'code' => array(
+      'custom' => TRUE,
+      'label' => t('Code (positive integer if watchdog \'link\' is N or \'N\')', array(), array('context' => 'module:jsonlog')),
+      'value' => 0,
     ),
     'variables' => array(
       'label' => t('Variables (always null, variables get replaced into message)', array(), array('context' => 'module:jsonlog')),
