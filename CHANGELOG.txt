@@ -1,3 +1,4 @@
+
 jsonlog 7.x-2.x, 2015-06-06
 ---------------------------
 - New 'canonical' name property for simpler identification across load balanced
