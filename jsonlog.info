@@ -1,5 +1,5 @@
 name = JSON Log
-description = Logs watchdog events JSON-formatted to a log file.
+description = Logs watchdog events JSON-formatted to file.
 package = Administration
 
 core = 7.x
