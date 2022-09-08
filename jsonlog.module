@@ -81,11 +81,11 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
   if (($values['jsonlog_tags'] = $v = trim($values['jsonlog_tags'])) !== '') {
     $v = str_replace(array("\r", "\n"), '', $v);
     if ($v !== '') {
-      if ($v{0} === ',') {
+      if ($v[0] === ',') {
         $v = substr($v, 1);
       }
       if ($v !== '') {
-        if ($v{strlen($v) - 1} === ',') {
+        if ($v[strlen($v) - 1] === ',') {
           $v = substr($v, 0, strlen($v) - 1);
         }
       }
@@ -256,7 +256,7 @@ function jsonlog_watchdog(array $log_entry) {
     }
 
     // Strip tags if message starts with < (Inspect logs in tag).
-    if ($message{0} === '<') {
+    if ($message[0] === '<') {
       $message = strip_tags($message);
     }
 
