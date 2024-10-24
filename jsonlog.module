@@ -56,7 +56,7 @@ function jsonlog_form_system_logging_settings_validate($form, $form_state) {
 function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
   module_load_include('inc', 'jsonlog');
 
-  $values =& $form_state['values'];
+  $values = $form_state['values'];
 
   $fields = array(
     'jsonlog_severity_threshold',
@@ -64,17 +64,19 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
     'jsonlog_siteid',
     'jsonlog_dir',
     'jsonlog_file_time',
+    'jsonlog_canonical',
   );
+  $settings = [];
 
   foreach ($fields as $name) {
     // Trim all values.
-    $values[$name] = trim($values[$name]);
+    $settings[$name] = trim($values[$name]);
   }
-  if (!$values['jsonlog_truncate']) {
-    $values['jsonlog_truncate'] = 0;
+  if (!$settings['jsonlog_truncate']) {
+    $settings['jsonlog_truncate'] = 0;
   }
-  if (!$values['jsonlog_dir']) {
-    $values['jsonlog_dir'] = jsonlog_default_dir();
+  if (!$settings['jsonlog_dir']) {
+    $settings['jsonlog_dir'] = jsonlog_default_dir();
   }
 
   // Tags.
@@ -93,17 +95,19 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
         $v = preg_replace('/ *, */', ',', $v);
       }
     }
-    $values['jsonlog_tags'] = trim($v);
+    $settings['jsonlog_tags'] = trim($v);
   }
 
   // Test.
-  if ($values['jsonlog_test_filing'] && $values['jsonlog_siteid'] && $values['jsonlog_dir'] && $values['jsonlog_file_time']) {
+  if ($values['jsonlog_test_filing'] && $settings['jsonlog_siteid'] && $settings['jsonlog_dir'] && $settings['jsonlog_file_time']) {
     module_load_include('inc', 'jsonlog');
-    jsonlog_test_filing($values['jsonlog_dir'] . '/' . $values['jsonlog_siteid']
-      . ($values['jsonlog_file_time'] == 'none' ? '' : ('.' . date($values['jsonlog_file_time']))) . '.json.log');
+    jsonlog_test_filing($settings['jsonlog_dir'] . '/' . $settings['jsonlog_siteid']
+      . ($values['jsonlog_file_time'] == 'none' ? '' : ('.' . date($settings['jsonlog_file_time']))) . '.json.log');
   }
-  // Don't ever save that field.
-  unset($form_state['input']['jsonlog_test_filing'], $values['jsonlog_test_filing']);
+
+  foreach ($settings as $name => $value) {
+    config_set('jsonlog.settings', $name, $value);
+  }
 }
 
 /**
@@ -112,8 +116,8 @@ function jsonlog_form_system_logging_settings_submit($form, &$form_state) {
  *
  * Default severity threshold: warning.
  *
- * Prefers server environment variables for Drupal conf variables.
- * Any jsonlog conf variable may be overridden by a 'drupal_[jsonlog variable]'
+ * Prefers server environment variables for Backdrop conf variables.
+ * Any jsonlog conf variable may be overridden by a 'backdrop_[jsonlog variable]'
  * server environment var.
  *
  *  JSON fields (watchdog standard fields are not explained here):
@@ -149,8 +153,8 @@ function jsonlog_watchdog(array $log_entry) {
   if (!$_threshold) {
     // A threshold of zero (emergency) wouldnt make sense in the real world,
     // so no reason to check by type (boolean).
-    if (!($_threshold = getenv('drupal_jsonlog_severity_threshold'))) {
-      $_threshold = variable_get('jsonlog_severity_threshold', WATCHDOG_WARNING);
+    if (!($_threshold = getenv('backdrop_jsonlog_severity_threshold'))) {
+      $_threshold = config_get('jsonlog.settings', 'jsonlog_severity_threshold');
     }
   }
   // Severity is upside down; less is more.
@@ -160,41 +164,41 @@ function jsonlog_watchdog(array $log_entry) {
 
   // Load the rest of the settings.
   if (!$_site_id) {
-    // Site ID: Try server environment var before Drupal conf. var.
-    if (!($_site_id = getenv('drupal_jsonlog_siteid'))) {
-      if (!($_site_id = variable_get('jsonlog_siteid'))) {
+    // Site ID: Try server environment var before backdrop conf. var.
+    if (!($_site_id = getenv('backdrop_jsonlog_siteid'))) {
+      if (!($_site_id = config_get('jsonlog.settings', 'jsonlog_siteid'))) {
         module_load_include('inc', 'jsonlog');
-        variable_set('jsonlog_siteid', $_site_id = jsonlog_default_site_id());
+        config_set('jsonlog.settings', 'jsonlog_siteid', $_site_id = jsonlog_default_site_id());
       }
     }
 
     // Canonical site identifier across site instances.
-    if (!($_canonical = getenv('drupal_jsonlog_canonical'))) {
-      $_canonical = variable_get('jsonlog_canonical', '');
+    if (!($_canonical = getenv('backdrop_jsonlog_canonical'))) {
+      $_canonical = config_get('jsonlog.settings', 'jsonlog_canonical');
     }
 
     // Dir.
-    if (!($dir = getenv('drupal_jsonlog_dir'))) {
-      if (!($dir = variable_get('jsonlog_dir'))) {
+    if (!($dir = getenv('backdrop_jsonlog_dir'))) {
+      if (!($dir = config_get('jsonlog.settings', 'jsonlog_dir'))) {
         module_load_include('inc', 'jsonlog');
         if (($dir = jsonlog_default_dir())) {
-          variable_set('jsonlog_dir', $dir);
+          config_set('jsonlog.settings', 'jsonlog_dir', $dir);
         }
         else {
-          error_log('Drupal jsonlog, site ID[' . $_site_id . '], failed to establish server\'s default log dir.');
+          error_log('backdrop jsonlog, site ID[' . $_site_id . '], failed to establish server\'s default log dir.');
         }
       }
     }
 
     // File timestamp.
-    if (!($file_time = getenv('drupal_jsonlog_file_time'))) {
-      $file_time = variable_get('jsonlog_file_time', 'Ymd');
+    if (!($file_time = getenv('backdrop_jsonlog_file_time'))) {
+      $file_time = config_get('jsonlog.settings', 'jsonlog_file_time');
     }
     $_file = $dir . '/' . $_site_id . ($file_time == 'none' ? '' : ('.' . date($file_time))) . '.json.log';
 
-    // Truncation: Try server environment var before Drupal conf. var.
-    if (($_truncate = getenv('drupal_jsonlog_truncate')) === FALSE) {
-      $_truncate = variable_get('jsonlog_truncate', JSONLOG_TRUNCATE_DEFAULT);
+    // Truncation: Try server environment var before backdrop conf. var.
+    if (($_truncate = getenv('backdrop_jsonlog_truncate')) === FALSE) {
+      $_truncate = config_get('jsonlog.settings', 'jsonlog_truncate');
     }
     if ($_truncate) {
       // Kb to bytes.
@@ -217,9 +221,9 @@ function jsonlog_watchdog(array $log_entry) {
       'debug',
     );
 
-    // Tags: append Drupal conf. var to server env. var.
-    $tags_server = ($tags = getenv('drupal_jsonlog_tags')) !== FALSE ? $tags : '';
-    $tags_site = variable_get('jsonlog_tags', '');
+    // Tags: append backdrop conf. var to server env. var.
+    $tags_server = ($tags = getenv('backdrop_jsonlog_tags')) !== FALSE ? $tags : '';
+    $tags_site = config_get('jsonlog.settings', 'jsonlog_tags');
     if ($tags_server) {
       $tags = $tags_server;
       if ($tags_site) {
@@ -270,7 +274,7 @@ function jsonlog_watchdog(array $log_entry) {
       // byte length.
       $truncation = array(
         $le,
-        strlen($message = drupal_truncate_bytes($message, (int) $_truncate))
+        strlen($message = backdrop_truncate_bytes($message, (int) $_truncate))
       );
     }
   }
@@ -291,7 +295,7 @@ function jsonlog_watchdog(array $log_entry) {
   $entry->canonical = $_canonical;
   $entry->tags = $_tags;
 
-  $entry->type = 'drupal';
+  $entry->type = 'backdrop';
   $entry->subtype = $log_entry['type'];
 
   $entry->severity = $_severity[$log_entry['severity']];
@@ -332,7 +336,27 @@ function jsonlog_watchdog(array $log_entry) {
 
   // File append, using lock (write, doesn't prevent reading).
   // If failure: log filing error to web server's default log.
-  if (!file_put_contents($_file, "\n" . drupal_json_encode($entry), FILE_APPEND | LOCK_EX)) {
-    error_log('Drupal jsonlog, site ID[' . $_site_id . '], failed to write to file[' . $_file . '].');
+  if (!file_put_contents($_file, "\n" . backdrop_json_encode($entry), FILE_APPEND | LOCK_EX)) {
+    error_log('Backdrop jsonlog, site ID[' . $_site_id . '], failed to write to file[' . $_file . '].');
   }
+}
+
+/**
+ * Implements hook_config_info().
+ */
+function jsonlog_config_info() {
+  $prefixes['jsonlog.settings'] = [
+    'label' => t('JsonLog Settings'),
+    'group' => t('Configuration'),
+  ];
+  return $prefixes;
+}
+
+/**
+ * Implements hook_autoload_info().
+ */
+function jsonlog_autoload_info() {
+  return [
+    'jsonlog' => 'jsonlog.inc',
+  ];
 }

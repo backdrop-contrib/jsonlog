@@ -1,8 +1,7 @@
 name = JSON Log
 description = Logs watchdog events JSON-formatted to file.
-package = Administration
-
-core = 7.x
-php = 5.3
-
+backdrop = 1.x
+type = module
 configure = admin/config/development/logging
+
+

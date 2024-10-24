@@ -6,7 +6,7 @@ jsonlog 7.x-2.x, 2015-06-06
 ---------------------------
 - New 'canonical' name property for simpler identification across load balanced
   site instances.
-- Support event/error 'code'; an exploitation of Drupal watchdog's 'link'
+- Support event/error 'code'; an exploitation of Backdrop watchdog's 'link'
   property (when that is integer or 'integer').
 
 jsonlog 7.x-2.x, 2015-04-28
@@ -24,7 +24,7 @@ jsonlog 7.x-2.x, 2015-03-21
 
 jsonlog 7.x-2.x, 2014-12-16
 ---------------------------
-* Don't escape newlines, (drupal_)json_encode() does that.
+* Don't escape newlines, (backdrop_)json_encode() does that.
 * Increased default truncation to 64 (Kb, was 4).
 * Release 7.x-2.0.
 
@@ -36,17 +36,17 @@ jsonlog 7.x-2.x, 2014-12-06
 ---------------------------
 * Now defaults to write to daily log files instead of one file forever.
 * Replaced the setting jsonlog_file with jsonlog_dir.
-* Watchdog 'type' is now being logged as JSON 'subtype', and JSON 'type' is always 'drupal'.
+* Watchdog 'type' is now being logged as JSON 'subtype', and JSON 'type' is always 'backdrop'.
 
 jsonlog 7.x-2.x, 2014-12-05
 ---------------------------
-* Watchdog 'type' is now being logged as JSON 'category', and JSON 'type' is always 'drupal'.
+* Watchdog 'type' is now being logged as JSON 'category', and JSON 'type' is always 'backdrop'.
 
 jsonlog 7.x-1.x, 2014-11-12
 ---------------------------
 * Fixed that settings form didn't work at all (issue #2373857).
 * Site id and file settings are required.
-* Test filing shan't manipulate drupal file setting unnecessarily.
+* Test filing shan't manipulate backdrop file setting unnecessarily.
 * Release 7.x-1.3.
 
 jsonlog 7.x-1.x, 2014-11-11
@@ -75,11 +75,11 @@ jsonlog 7.x-1.x, 2014-10-14
 ---------------------------
 * JSON field names are no longer configurable.
 * The version field's value is no longer configurable, but always 1.
-* All conf variables are now overridable by server environment variables (drupal_[variable name]), and no longer conditioned by server env var drupal_jsonlog_server_conf (now obsolete).
+* All conf variables are now overridable by server environment variables (backdrop_[variable name]), and no longer conditioned by server env var backdrop_jsonlog_server_conf (now obsolete).
 
 jsonlog 7.x-1.x, 2014-08-08
 ---------------------------
-* Use server environment vars instead of Drupal conf vars, if server env.var 'drupal_jsonlog_server_conf' is set.
+* Use server environment vars instead of backdrop conf vars, if server env.var 'backdrop_jsonlog_server_conf' is set.
 
 jsonlog 7.x-1.x, 2014-08-06
 ---------------------------
@@ -87,7 +87,7 @@ jsonlog 7.x-1.x, 2014-08-06
 
 jsonlog 7.x-1.x, 2014-08-03
 ---------------------------
-* Use API drupal_truncate_bytes instead of custom multibyte truncation algo.
+* Use API dbackdrop_truncate_bytes instead of custom multibyte truncation algo.
 
 jsonlog 7.x-1.x, 2014-07-29
 ---------------------------

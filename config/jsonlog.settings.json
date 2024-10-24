@@ -1,0 +1,10 @@
+{
+    "_config_name": "jsonlog.settings",
+    "jsonlog_dir": "",
+    "jsonlog_siteid": "",
+    "jsonlog_file_time": "Ymd",
+    "jsonlog_severity_threshold": 4,
+    "jsonlog_truncate": 64,
+    "jsonlog_canonical": "",
+    "jsonlog_tags": ""
+}

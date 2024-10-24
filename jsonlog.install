@@ -8,14 +8,14 @@
  * Implements hook_uninstall().
  */
 function jsonlog_uninstall() {
-  // The equivalent server environment vars are named 'drupal_'....
-  variable_del('jsonlog_severity_threshold');
-  variable_del('jsonlog_truncate');
-  variable_del('jsonlog_siteid');
-  variable_del('jsonlog_canonical');
-  variable_del('jsonlog_dir');
-  variable_del('jsonlog_file_time');
-  variable_del('jsonlog_tags');
+  // The equivalent server environment vars are named 'backdrop_'....
+  config_clear('jsonlog.settings', 'jsonlog_severity_threshold');
+  config_clear('jsonlog.settings', 'jsonlog_truncate');
+  config_clear('jsonlog.settings', 'jsonlog_siteid');
+  config_clear('jsonlog.settings', 'jsonlog_canonical');
+  config_clear('jsonlog.settings', 'jsonlog_dir');
+  config_clear('jsonlog.settings', 'jsonlog_file_time');
+  config_clear('jsonlog.settings', 'jsonlog_tags');
 }
 
 /**
@@ -52,4 +52,27 @@ function jsonlog_update_7002() {
       ->condition('name', array('jsonlog_file'), 'IN')
       ->execute();
   }
+}
+
+/**
+ * Migrate jsonlog variables to config.
+ */
+function jsonlog_update_1000() {
+  $config = config('jsonlog.settings');
+  $config->set('jsonlog_dir', update_variable_get('jsonlog_dir', ''));
+  $config->set('jsonlog_siteid', update_variable_get('jsonlog_siteid', ''));
+  $config->set('jsonlog_file_time', update_variable_get('jsonlog_file_time', 'Ymd'));
+  $config->set('jsonlog_severity_threshold', update_variable_get('jsonlog_severity_threshold', 4));
+  $config->set('jsonlog_truncate', update_variable_get('jsonlog_truncate', 64));
+  $config->set('jsonlog_canonical', update_variable_get('jsonlog_canonical', ''));
+  $config->set('jsonlog_tags', update_variable_get('jsonlog_tags', ''));
+  $config->save();
+
+  update_variable_del('jsonlog_dir');
+  update_variable_del('jsonlog_siteid');
+  update_variable_del('jsonlog_file_time');
+  update_variable_del('jsonlog_severity_threshold');
+  update_variable_del('jsonlog_truncate');
+  update_variable_del('jsonlog_canonical');
+  update_variable_del('jsonlog_tags');
 }

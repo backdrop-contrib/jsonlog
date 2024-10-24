@@ -14,13 +14,13 @@
  * @return string
  */
 function jsonlog_default_site_id() {
-  if (($site_id = getenv('drupal_jsonlog_siteid'))) {
+  if (($site_id = getenv('backdrop_jsonlog_siteid'))) {
     return $site_id;
   }
 
   // Server's hostname + database name + database prefix (if any).
   $db =& $GLOBALS['databases']['default']['default'];
-  $site_id = drupal_strtolower(preg_replace('/[^\w\d\.\-_]/', '-', gethostname()))
+  $site_id = backdrop_strtolower(preg_replace('/[^\w\d\.\-_]/', '-', gethostname()))
     . '__' . $db['database']
     . (!$db['prefix'] ? '' : ('__' . $db['prefix']));
   unset($db); // Clear ref.
@@ -33,13 +33,13 @@ function jsonlog_default_site_id() {
  *
  * Directory default:
  * PHP:ini error_log - unless that is 'syslog' (then checks the usual suspects
- * /var/log/...) - plus /drupal-jsonlog.
+ * /var/log/...) - plus /backdrop-jsonlog.
  *
  * @return string
  *   Empty upon failure.
  */
 function jsonlog_default_dir() {
-  if (($dir = getenv('drupal_jsonlog_dir'))) {
+  if (($dir = getenv('backdrop_jsonlog_dir'))) {
     return $dir;
   }
 
@@ -64,7 +64,7 @@ function jsonlog_default_dir() {
   }
 
   if ($dir) {
-    return $dir . '/drupal-jsonlog';
+    return $dir . '/backdrop-jsonlog';
   }
   return '';
 }
@@ -73,7 +73,7 @@ function jsonlog_default_dir() {
  * Checks if log dir+file exists and is writable, and logs to watchdog.
  *
  * Usable by drush script; prints messages via drush_log() instead
- * drupal_set_message() if in CLI mode.
+ * backdrop_set_message() if in CLI mode.
  *
  * @see jsonlog_default_dir()
  *
@@ -83,7 +83,7 @@ function jsonlog_default_dir() {
  * @return boolean
  */
 function jsonlog_test_filing($file = '') {
-  $is_drush = drupal_is_cli();
+  $is_drush = backdrop_is_cli();
 
   if ($file) {
     $restore_dir_setting = TRUE;
@@ -91,7 +91,7 @@ function jsonlog_test_filing($file = '') {
     $dir = dirname($file);
     if (!$dir) {
       if (!$is_drush) {
-        drupal_set_message(t('jsonlog: Log directory name is empty.'), 'error');
+        backdrop_set_message(t('jsonlog: Log directory name is empty.'), 'error');
       }
       else {
         drush_log(dt('jsonlog: Log directory name is empty.'), 'error');
@@ -104,11 +104,11 @@ function jsonlog_test_filing($file = '') {
   else {
     $restore_dir_setting = FALSE;
 
-    if (!($dir = getenv('drupal_jsonlog_dir'))) {
-      if (!($dir = variable_get('jsonlog_dir'))) {
+    if (!($dir = getenv('backdrop_jsonlog_dir'))) {
+      if (!($dir = config_get('jsonlog.settings', 'jsonlog_dir'))) {
         if (!($dir = jsonlog_default_dir())) {
           if (!$is_drush) {
-            drupal_set_message(t('jsonlog: Failed to establish the server\'s default logging directory.'), 'error');
+            backdrop_set_message(t('jsonlog: Failed to establish the server\'s default logging directory.'), 'error');
           }
           else {
             drush_log(dt('jsonlog: Failed to establish the server\'s default logging directory.'), 'error');
@@ -119,13 +119,13 @@ function jsonlog_test_filing($file = '') {
     }
 
     // Make file name.
-    if (!($site_id = getenv('drupal_jsonlog_siteid'))) {
-      if (!($site_id = variable_get('jsonlog_siteid'))) {
+    if (!($site_id = getenv('backdrop_jsonlog_siteid'))) {
+      if (!($site_id = config_get('jsonlog.settings', 'jsonlog_siteid'))) {
         $site_id = jsonlog_default_site_id();
       }
     }
-    if (!($file_time = getenv('drupal_jsonlog_file_time'))) {
-      $file_time = variable_get('jsonlog_file_time', 'Ymd');
+    if (!($file_time = getenv('backdrop_jsonlog_file_time'))) {
+      $file_time = config_get('jsonlog.settings', 'jsonlog_file_time');
     }
     $file = $dir . '/' . $site_id . ($file_time == 'none' ? '' : ('.' . date($file_time))) . '.json.log';
 
@@ -134,7 +134,7 @@ function jsonlog_test_filing($file = '') {
 
   if (!file_exists($dir)) {
     if (!$is_drush) {
-      drupal_set_message(
+      backdrop_set_message(
         t(
           'jsonlog: The log directory doesn\'t exist.!breakPlease create the directory \'!dir\'!breakor change the \'Log file\' setting.!breakAnd if using \'Timestamped log file name\' then the directory must be writable for the web server user.',
           array('!dir' => $dir, '!break' => '<br/>')
@@ -157,7 +157,7 @@ function jsonlog_test_filing($file = '') {
     if (!touch($file)) {
       if (!$file_time_at_all) {
         if (!$is_drush) {
-          drupal_set_message(
+          backdrop_set_message(
             t(
               'jsonlog: The log file doesn\'t exist.!breakPlease create the file \'!file\'!breakor change the \'Log directory\' setting.',
               array('!file' => $file, '!break' => '<br/>')
@@ -177,7 +177,7 @@ function jsonlog_test_filing($file = '') {
       }
       else {
         if (!$is_drush) {
-          drupal_set_message(
+          backdrop_set_message(
             t(
               'jsonlog: When using \'Timestamped log file name\' then the log directory !dir must be writable (and executable) for the web server user.',
               array('!dir' => $dir, '!break' => '<br/>')
@@ -201,7 +201,7 @@ function jsonlog_test_filing($file = '') {
   elseif (!is_writable($file)) {
     if (!$file_time_at_all) {
       if (!$is_drush) {
-        drupal_set_message(
+        backdrop_set_message(
           t(
             'jsonlog: The log file is not writable for the webserver user.!breakPlease check permissions of the file \'!file\'!breakand make sure that it\'s parent directory is executable for the webserver user.',
             array('!file' => $file, '!break' => '<br/>')
@@ -221,7 +221,7 @@ function jsonlog_test_filing($file = '') {
     }
     else {
       if (!$is_drush) {
-        drupal_set_message(
+        backdrop_set_message(
           t(
             'jsonlog: When using \'Timestamped log file name\' then the log directory !dir must be writable (and executable) for the web server user.',
             array('!dir' => $dir, '!break' => '<br/>')
@@ -247,8 +247,8 @@ function jsonlog_test_filing($file = '') {
   // - otherwise jsonlog_watchdog() would still use the old value for this write
   $original_dir = NULL;
   if ($restore_dir_setting) {
-    $original_dir = variable_get('jsonlog_dir', NULL);
-    variable_set('jsonlog_dir', $dir);
+    $original_dir = config_get('jsonlog.settings', 'jsonlog_dir');
+    config_set('jsonlog.settings', 'jsonlog_dir', $dir);
   }
 
   try {
@@ -256,7 +256,7 @@ function jsonlog_test_filing($file = '') {
       'jsonlog',
       'Testing watchdog logging - please check if this entry was written to file \'!file\'.',
       array('!file' => $file),
-      ($threshold = getenv('drupal_jsonlog_severity_threshold')) ? $threshold : variable_get('jsonlog_severity_threshold', WATCHDOG_WARNING)
+      ($threshold = getenv('backdrop_jsonlog_severity_threshold')) ? $threshold : config_get('jsonlog.settings', 'jsonlog_severity_threshold')
     );
   }
   catch (Exception $xc) {
@@ -267,15 +267,15 @@ function jsonlog_test_filing($file = '') {
   // Restore original value.
   if ($restore_dir_setting) {
     if ($original_dir === NULL) {
-      variable_del('jsonlog_dir');
+      config_clear('jsonlog.settings', 'jsonlog_dir');
     }
     else {
-      variable_set('jsonlog_dir', $original_dir);
+      config_set('jsonlog.settings', 'jsonlog_dir', $original_dir);
     }
   }
 
   if (!$is_drush) {
-    drupal_set_message(
+    backdrop_set_message(
       t(
         'jsonlog: Logging to \'!file\' seems to work,!breakbut please check if that file now contains an entry whose message starts with \'Testing watchdog logging\'.',
         array('!file' => $file, '!break' => '<br/>')
@@ -308,15 +308,15 @@ function _jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
 
   $form['#attributes']['autocomplete'] = 'off';
 
-  drupal_add_css(
-    drupal_get_path('module', 'jsonlog') . '/jsonlog.admin.css',
+  backdrop_add_css(
+    backdrop_get_path('module', 'jsonlog') . '/jsonlog.admin.css',
     array('type' => 'file', 'group' => CSS_DEFAULT, 'preprocess' => FALSE, 'every_page' => FALSE)
   );
 
   // Defaults.
   $siteid_default = jsonlog_default_site_id();
   if (!($dir_default = jsonlog_default_dir())) {
-    drupal_set_message(t('Failed to establish the server\'s default logging directory.', array(), array('context' => 'module:jsonlog')), 'error');
+    backdrop_set_message(t('Failed to establish the server\'s default logging directory.', array(), array('context' => 'module:jsonlog')), 'error');
   }
 
   // These translations are used a lot.
@@ -337,17 +337,17 @@ function _jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
   $form['jsonlog']['description'] = array(
     '#type' => 'markup',
     '#markup' => '<p>'
-      . t('Any server variable \'drupal_[jsonlog_varable_name]\' will override \'[jsonlog_varable_name]\' drupal conf. variable,!breakexcept for !emphtags!_emph (will be combined).', array('!break' => '<br/>', '!emph' => '<em>', '!_emph' => '</em>'), array('context' => 'module:jsonlog'))
+      . t('Any server variable \'backdrop_[jsonlog_varable_name]\' will override \'[jsonlog_varable_name]\' backdrop conf. variable,!breakexcept for !emphtags!_emph (will be combined).', array('!break' => '<br/>', '!emph' => '<em>', '!_emph' => '</em>'), array('context' => 'module:jsonlog'))
       . '<br/>' . t('Tip: Server environment variables set in virtual host or .htaccess won\'t be visible by drush/CLI; /etc/environment might be your friend instead.', array('!break' => '<br/>'), array('context' => 'module:jsonlog'))
       . '</p>',
   );
 
   // Severity threshold.
-  if (($severity_threshold = getenv('drupal_jsonlog_severity_threshold'))) {
+  if (($severity_threshold = getenv('backdrop_jsonlog_severity_threshold'))) {
     $overridden = TRUE;
   }
   else {
-    $severity_threshold = variable_get('jsonlog_severity_threshold', WATCHDOG_WARNING);
+    $severity_threshold = config_get('jsonlog.settings', 'jsonlog_severity_threshold');
     $overridden = FALSE;
   }
   $form['jsonlog']['jsonlog_severity_threshold'] = array(
@@ -368,11 +368,11 @@ function _jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
   }
 
   // Truncation.
-  if (($truncate = getenv('drupal_jsonlog_truncate')) !== FALSE) {
+  if (($truncate = getenv('backdrop_jsonlog_truncate')) !== FALSE) {
     $overridden = TRUE;
   }
   else {
-    $truncate = variable_get('jsonlog_truncate', JSONLOG_TRUNCATE_DEFAULT);
+    $truncate = config_get('jsonlog.settings', 'jsonlog_truncate');
     $overridden = FALSE;
   }
   $form['jsonlog']['jsonlog_truncate'] = array(
@@ -401,11 +401,11 @@ function _jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
   }
 
   // Site ID.
-  if (($site_id = getenv('drupal_jsonlog_siteid'))) {
+  if (($site_id = getenv('backdrop_jsonlog_siteid'))) {
     $overridden = TRUE;
   }
   else {
-    if (!($site_id = variable_get('jsonlog_siteid'))) {
+    if (!($site_id = config_get('jsonlog.settings', 'jsonlog_siteid'))) {
       $site_id = $siteid_default;
     }
     $overridden = FALSE;
@@ -435,11 +435,11 @@ function _jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
   }
 
   // Canonical site identifier across site instances.
-  if (($canonical = getenv('drupal_jsonlog_canonical'))) {
+  if (($canonical = getenv('backdrop_jsonlog_canonical'))) {
     $overridden = TRUE;
   }
   else {
-    $canonical = variable_get('jsonlog_canonical', '');
+    $canonical = config_get('jsonlog.settings', 'jsonlog_canonical');
     $overridden = FALSE;
   }
   $form['jsonlog']['jsonlog_canonical'] = array(
@@ -465,11 +465,11 @@ function _jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
 
   // Timestamped file; default 'Ymd',
   // values: 'Ymd' (~ YYYYMMDD)|'YW' (~ YYYYWW)|'Ym' (~ YYYYMM)|'none'.
-  if (($file_time = getenv('drupal_jsonlog_file_time'))) {
+  if (($file_time = getenv('backdrop_jsonlog_file_time'))) {
     $overridden = TRUE;
   }
   else {
-    if (!($file_time = variable_get('jsonlog_file_time'))) {
+    if (!($file_time = config_get('jsonlog.settings', 'jsonlog_file_time'))) {
       $file_time = 'Ymd';
     }
     $overridden = FALSE;
@@ -502,11 +502,11 @@ function _jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
   }
 
   // Dir.
-  if (($dir = getenv('drupal_jsonlog_dir'))) {
+  if (($dir = getenv('backdrop_jsonlog_dir'))) {
     $overridden = TRUE;
   }
   else {
-    if (!($dir = variable_get('jsonlog_dir'))) {
+    if (!($dir = config_get('jsonlog.settings', 'jsonlog_dir'))) {
       $dir = $dir_default;
     }
     $overridden = FALSE;
@@ -519,7 +519,7 @@ function _jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
       array('context' => 'module:jsonlog')
     ),
     '#description' => t(
-      'Defaults to PHP ini \'error_log\' path + /drupal-jsonlog:!break!default!breakNB: The web server user (www-data|apache) probably isn\'t allowed to write to a file in the \'error_log\' path!break- create a sub dir (like \'drupal-jsonlog\') as root user, and do a chown or chmod on that sub dir to make it writable (and executable) by the web server user.',
+      'Defaults to PHP ini \'error_log\' path + /backdrop-jsonlog:!break!default!breakNB: The web server user (www-data|apache) probably isn\'t allowed to write to a file in the \'error_log\' path!break- create a sub dir (like \'backdrop-jsonlog\') as root user, and do a chown or chmod on that sub dir to make it writable (and executable) by the web server user.',
       array(
         '!default' => '&nbsp; ' . $dir_default,
         '!break' => '<br/>',
@@ -547,7 +547,7 @@ function _jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
   );
 
   // Tags.
-  $tags_server = ($tags = getenv('drupal_jsonlog_tags')) !== FALSE ? $tags : '';
+  $tags_server = ($tags = getenv('backdrop_jsonlog_tags')) !== FALSE ? $tags : '';
   $form['jsonlog']['jsonlog_tags'] = array(
     '#type' => 'textfield',
     '#title' => t('Tags !sml[jsonlog_tags]!_sml', array('!sml' => '<small>', '!_sml' => '</small>'), array('context' => 'module:jsonlog')),
@@ -556,7 +556,7 @@ function _jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
       array('!break' => '<br/>',),
       array('context' => 'module:jsonlog')
     ),
-    '#default_value' => $tags_site = variable_get('jsonlog_tags', ''),
+    '#default_value' => $tags_site = config_get('jsonlog.settings', 'jsonlog_tags'),
     '#size' => 100,
     '#field_prefix' => $tags_server !== '' ? ($tags_server . ', ') : '',
   );
@@ -632,7 +632,7 @@ function _jsonlog_form_system_logging_settings_alter(&$form, &$form_state) {
     ),
     'type' => array(
       'label' => t('Type', array(), array('context' => 'module:jsonlog')),
-      'value' => 'drupal',
+      'value' => 'backdrop',
     ),
     'subtype' => array(
       'label' => t('Subtype (watchdog \'type\')', array(), array('context' => 'module:jsonlog')),

@@ -8,13 +8,13 @@ Changes
 
 New features
 ------------
-* Watchdog 'type' is now being logged as JSON 'subtype', and JSON 'type' is always 'drupal'.
+* Watchdog 'type' is now being logged as JSON 'subtype', and JSON 'type' is always 'backdrop'.
 * Now defaults to write to daily log files instead of one file forever.
 * Optionally log to same file forever, or daily/weekly/monthly files.
 
 Bug fixes
 ---------
-* Don't escape newlines, (drupal_)json_encode() does that.
+* Don't escape newlines, (backdrop_)json_encode() does that.
 
 Security
 --------
