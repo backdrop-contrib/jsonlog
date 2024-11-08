@@ -39,7 +39,7 @@ Credits
 -------
 
 - Backdrop development supported by [Giant Rabbit](https://giantrabbit.com).
-- Ported to Backdrop by [Lauren Blais](https://github.com/rlblais)
+- Ported to Backdrop by [Alejandro Madrigal](https://github.com/AleMadLei/)
 - Originally written for Drupal and co-maintained by [jacobfriis](https://www.drupal.org/u/jacobfriis), [lorenzs](https://www.drupal.org/u/lorenzs)
 
 License
